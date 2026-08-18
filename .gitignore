@@ -1,0 +1,30 @@
+# Environment / secrets
+.env
+.env.*
+
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Build
+/bin/
+/dist/
+
+# Local database
+test.db
+
+# Uploaded files
+uploads/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
