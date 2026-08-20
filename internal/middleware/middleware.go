@@ -39,7 +39,7 @@ func CorsMiddleware(next http.Handler) http.Handler {
 
 		// Разрешаем Vue dev server
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, OPTIONS, DELETE")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
 		// обработка preflight запроса

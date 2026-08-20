@@ -15,38 +15,42 @@ type EmployeeCard struct {
 	Name              string              `gorm:"not null" json:"name"`
 	MiddleName        *string             `json:"middle_name"`
 	Surname           *string             `json:"surname"`
-	Profession        *string             `json:"profession"`
 	Phone             *string             `json:"phone"`
+	Email             string              `json:"email"`
 	DateOfBirht       string              `json:"date_of_birth"`
 	PlaceOFResidence  string              `json:"place_of_residence"`
 	MaritalStatus     string              `json:"marital_status"`
 	StartDate         string              `json:"start_date"`
-	Email             string              `json:"email"`
-	SalaryRate        string              `json:"salary_rate"`
+	Expenses          string              `json:"experience"`
 	Education         string              `json:"education"`
 	PasportNumber     string              `json:"pasport_number"`
 	PasportSerial     string              `json:"pasport_serial"`
-	INN               string              `json:"inn"`
+	Snils             string              `json:"snils"`
+	Profession        *string             `json:"profession"`
+	SalaryRate        string              `json:"salary_rate"`
+	Status            bool                `json:"status"`
 	AgreementID       uint                `json:"agreement_id"`
-	Agreement         Agreement           `gorm:"foreignKey:AgreementID; constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	Agreement         Agreement           `gorm:"foreignKey:AgreementID; constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"agreement"`
 	EmployeeDocuments []EmployeeDocuments `gorm:"foreignKey:EmployeeCardID;constraint:OnDelete:CASCADE;" json:"employee_documents"`
 }
 
 type CategoryEmployeeDocument struct {
 	gorm.Model
-	CategoryName string `json:"category_name"`
+	CategoryName      string              `json:"category_name"`
+	EmployeeDocuments []EmployeeDocuments `gorm:"foreignKey:CategoryEmployeeDocumentID" json:"employee_documents"`
 }
 
 type EmployeeDocuments struct {
 	gorm.Model
-	DocumentName               string `json:"document_name"`
-	DocumentReal               bool   `json:"document_real"`
-	FileName                   string `json:"file_name"`
-	FilePath                   string `json:"file_path"`
-	FileSize                   int64  `json:"file_size"`
-	MimeType                   string `json:"mime_type"`
-	EmployeeCardID             uint   `json:"employe_card_id"`
-	CategoryEmployeeDocumentID uint   `json:"category_employee_card_id"`
+	DocumentName               string                   `json:"document_name"`
+	DocumentReal               bool                     `json:"document_real"`
+	FileName                   string                   `json:"file_name"`
+	FilePath                   string                   `json:"file_path"`
+	FileSize                   int64                    `json:"file_size"`
+	MimeType                   string                   `json:"mime_type"`
+	EmployeeCardID             uint                     `json:"employe_card_id"`
+	CategoryEmployeeDocumentID uint                     `json:"category_employee_document_id"`
+	CategoryEmployeeDocument   CategoryEmployeeDocument `gorm:"foreignKey:CategoryEmployeeDocumentID" json:"category_document_card"`
 }
 
 type User struct {

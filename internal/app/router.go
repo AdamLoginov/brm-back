@@ -11,8 +11,14 @@ func NewRouter() http.Handler {
 
 	mux.HandleFunc("GET /api/employeecards", middleware.AuthMiddleware(handlers.GetAllEmployeeCardHandler))
 	mux.HandleFunc("GET /api/employeescard/{id}/detail", middleware.AuthMiddleware(handlers.GetEmployeeCardDetailHandler))
+	mux.HandleFunc("GET /api/employeescard/document/{id}/detail", handlers.GetEmployeeCardDocumentDetailHandler)
+	mux.HandleFunc("GET /api/employeescard/document/category", middleware.AuthMiddleware(handlers.GetAllCategoryEmployeeDocumentHandler))
+	mux.HandleFunc("POST /api/employeescard/document/category/create", middleware.AuthMiddleware(handlers.CreateCategoryEmployeeDocumentHandler))
 	mux.HandleFunc("POST /api/employeescard/create", middleware.AuthMiddleware(handlers.CreateEmployeeCardHandler))
 	mux.HandleFunc("POST /api/employeescard/{id}/document/create", middleware.AuthMiddleware(handlers.CreateEmployeeCardDocumentHandler))
+	mux.HandleFunc("POST /api/employeescard/{id}/update", middleware.AuthMiddleware(handlers.UpdateEmployeeCardHandler))
+	mux.HandleFunc("DELETE /api/employeescard/document/{id}/delete", middleware.AuthMiddleware(handlers.DeleteEmployeeCardDocumentHandler))
+	mux.HandleFunc("DELETE /api/employeescard/document/category/{id}/delete", middleware.AuthMiddleware(handlers.DeleteCategoryEmployeeDocumentHandler))
 	mux.HandleFunc("DELETE /api/employeescard/delete/{id}", middleware.AuthMiddleware(handlers.DeleteEmployeeCardHandler))
 
 	mux.HandleFunc("GET /api/users/{id}", middleware.AuthMiddleware(handlers.GetUserHandler))

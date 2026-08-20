@@ -18,7 +18,7 @@ func GetEmployeeCardDetailHandler(w http.ResponseWriter, r *http.Request) {
 	var employeeCardId = r.PathValue("id")
 	var employeeCard models.EmployeeCard
 
-	if err := database.DB.Preload("EmployeeDocuments").First(&employeeCard, employeeCardId).Error; err != nil {
+	if err := database.DB.Preload("EmployeeDocuments.CategoryEmployeeDocument").Preload("Agreement").First(&employeeCard, employeeCardId).Error; err != nil {
 		msg := "[Error] Ошибка при получении данных"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)
@@ -57,25 +57,51 @@ func CreateEmployeeCardHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(models.Response{Message: "Карточка товара успешно создана!"})
 }
 
-func CategoryCategoryEmployeeDocumentHandler(w http.ResponseWriter, r *http.Request) {
-	var categoryEmployeeDocument models.CategoryEmployeeDocument
+func UpdateEmployeeCardHandler(w http.ResponseWriter, r *http.Request) {
+	var employeeCardID = r.PathValue("id")
+	var employeeCard models.EmployeeCard
 
-	if err := json.NewDecoder(r.Body).Decode(&categoryEmployeeDocument); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&employeeCard); err != nil {
 		msg := "[Error] Ошибка при чтении данных"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
 
-	if err := database.DB.Create(&categoryEmployeeDocument).Error; err != nil {
-		msg := "[Error] Ошибка при создании категории"
+	if err := database.DB.Model(&models.EmployeeCard{}).Where("id = ?", employeeCardID).Select("*").
+		Omit("id", "created_at", "updated_at", "agreement", "employee_documents").Updates(employeeCard).Error; err != nil {
+		msg := "[Error] Ошибка при обнавлении данных"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(models.Response{Message: "Категория успешно создана"})
+	json.NewEncoder(w).Encode(models.Response{Message: "Данные на сотрудника успешно обновлены"})
+}
+
+func GetEmployeeCardDocumentDetailHandler(w http.ResponseWriter, r *http.Request) {
+	var documentId = r.PathValue("id")
+	var document models.EmployeeDocuments
+
+	if err := database.DB.First(&document, documentId).Error; err != nil {
+		http.Error(w, "Ошибка при поиске файла в БД", http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := os.Stat(document.FilePath); os.IsNotExist(err) {
+		http.Error(w, "Физический файл отсутствует на сервере", http.StatusNotFound)
+		return
+	}
+
+	if document.MimeType != "" {
+		w.Header().Set("Content-Type", document.MimeType)
+	} else {
+		w.Header().Set("Content-Type", "application/octet-stream")
+	}
+
+	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", document.FileName))
+	http.ServeFile(w, r, document.FilePath)
 }
 
 func CreateEmployeeCardDocumentHandler(w http.ResponseWriter, r *http.Request) {
@@ -111,14 +137,16 @@ func CreateEmployeeCardDocumentHandler(w http.ResponseWriter, r *http.Request) {
 		mimeType := http.DetectContentType(buffer)
 
 		employeeCardID_uint, err := strconv.ParseUint(employeeCardID, 10, 32)
+		categoryID, _ := strconv.ParseUint(r.FormValue("category_employee_document_id"), 10, 32)
 
 		employeeDocument := models.EmployeeDocuments{
-			DocumentName:   r.FormValue("document_name"),
-			FileName:       handler.Filename,
-			FilePath:       filePath,
-			FileSize:       handler.Size,
-			MimeType:       mimeType,
-			EmployeeCardID: uint(employeeCardID_uint),
+			// DocumentName:               r.FormValue("document_name"),
+			FileName:                   handler.Filename,
+			FilePath:                   filePath,
+			FileSize:                   handler.Size,
+			MimeType:                   mimeType,
+			EmployeeCardID:             uint(employeeCardID_uint),
+			CategoryEmployeeDocumentID: uint(categoryID),
 		}
 
 		if err := database.DB.Create(&employeeDocument).Error; err != nil {
@@ -127,11 +155,24 @@ func CreateEmployeeCardDocumentHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, msg, http.StatusBadRequest)
 			return
 		}
-		// email.Attachments = append(email.Attachments, attachment)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(models.Response{Message: "Документ на сотрудника успешно добавлен"})
+}
+
+func DeleteEmployeeCardDocumentHandler(w http.ResponseWriter, r *http.Request) {
+	var documentId = r.PathValue("id")
+
+	if err := database.DB.Delete(&models.EmployeeDocuments{}, documentId).Error; err != nil {
+		msg := "Ошибка при удалении данных с сервера"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(models.Response{Message: "Документ сотрудника успешно удален!"})
 }
 
 func PutAgreementEmployeeCard(w http.ResponseWriter, r *http.Request) {
@@ -170,4 +211,52 @@ func DeleteEmployeeCardHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(models.Response{Message: "Карточка сотрудника успешно удалена!"})
+}
+
+func GetAllCategoryEmployeeDocumentHandler(w http.ResponseWriter, r *http.Request) {
+	var categoryEmployeeDocument []models.CategoryEmployeeDocument
+
+	if err := database.DB.Find(&categoryEmployeeDocument).Error; err != nil {
+		msg := "[Error] Ошибка при поиске категорий"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(categoryEmployeeDocument)
+}
+
+func CreateCategoryEmployeeDocumentHandler(w http.ResponseWriter, r *http.Request) {
+	var categoryEmployeeDocument models.CategoryEmployeeDocument
+
+	if err := json.NewDecoder(r.Body).Decode(&categoryEmployeeDocument); err != nil {
+		msg := "[Error] Ошибка при чтении данных"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	if err := database.DB.Create(&categoryEmployeeDocument).Error; err != nil {
+		msg := "[Error] Ошибка при создании категории"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(categoryEmployeeDocument)
+}
+
+func DeleteCategoryEmployeeDocumentHandler(w http.ResponseWriter, r *http.Request) {
+	var categoryID = r.PathValue("id")
+
+	if err := database.DB.Delete(&models.CategoryEmployeeDocument{}, categoryID).Error; err != nil {
+		msg := "[Error] Ошибка при удалении файла"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(models.Response{Message: "Категория успешно удалена!"})
 }
