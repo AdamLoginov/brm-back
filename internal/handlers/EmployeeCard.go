@@ -31,7 +31,7 @@ func GetEmployeeCardDetailHandler(w http.ResponseWriter, r *http.Request) {
 
 func GetAllEmployeeCardHandler(w http.ResponseWriter, r *http.Request) {
 	var employeeCard []models.EmployeeCard
-	if err := database.DB.Find(&employeeCard).Error; err != nil {
+	if err := database.DB.Preload("Agreement").Find(&employeeCard).Error; err != nil {
 		msg := "[Error] Ошибка получения карточек сотрудников"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusInternalServerError)
