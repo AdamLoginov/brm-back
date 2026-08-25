@@ -29,6 +29,20 @@ func GetEmployeeCardDetailHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(employeeCard)
 }
 
+func GetAllEmployeeCardAgreementHandler(w http.ResponseWriter, r *http.Request) {
+	var agreementID = r.PathValue("id")
+	var employeeCards []models.EmployeeCard
+	if err := database.DB.Where("agreement_id = ?", agreementID).Find(&employeeCards).Error; err != nil {
+		msg := "[Error] Ошибка при поиске"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(employeeCards)
+}
+
 func GetAllEmployeeCardHandler(w http.ResponseWriter, r *http.Request) {
 	var employeeCard []models.EmployeeCard
 	if err := database.DB.Preload("Agreement").Find(&employeeCard).Error; err != nil {

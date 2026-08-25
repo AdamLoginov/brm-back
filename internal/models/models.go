@@ -53,6 +53,17 @@ type EmployeeDocuments struct {
 	CategoryEmployeeDocument   CategoryEmployeeDocument `gorm:"foreignKey:CategoryEmployeeDocumentID" json:"category_document_card"`
 }
 
+type TimeSheet struct {
+	gorm.Model
+	Date           string `json:"date"`
+	EmployeeCardID uint   `json:"employee_card_id"`
+	AgreementID    uint   `json:"agreement_id"`
+	Status         string `json:"status"`
+
+	// TimeSheetID    uint      `json:"time_sheet_id"`
+	// TimeSheet      TimeSheet `gorm:"foreignKey:TimeSheetID" json:"time_sheet"`
+}
+
 type User struct {
 	gorm.Model
 	Login          string `gorm:"unique;not null"`
