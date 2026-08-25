@@ -53,6 +53,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/agreements/{id}/employee", middleware.AuthMiddleware(handlers.GetAllEmployeeCardAgreementHandler))
 
 	mux.HandleFunc("GET /api/agreements/{id}/timesheet", middleware.AuthMiddleware(handlers.GetAllAgreementTimeSheethandler))
+	mux.HandleFunc("GET /api/agreements/{id}/timesheet/month", middleware.AuthMiddleware(handlers.GetMonthAgreementTimeSheethandler))
 	mux.HandleFunc("POST /api/agreements/timesheet/update", middleware.AuthMiddleware(handlers.UpdateTimeSheetHandler))
 	mux.HandleFunc("POST /api/agreements/timesheet/create", middleware.AuthMiddleware(handlers.CreateTimeSheetHandler))
 	mux.HandleFunc("DELETE /api/agreements/timesheet/delete", middleware.AuthMiddleware(handlers.DeleteTimeSheetHandler))

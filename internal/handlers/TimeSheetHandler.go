@@ -21,6 +21,26 @@ func GetAllTimeSheethandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(timeSheets)
 }
 
+func GetMonthAgreementTimeSheethandler(w http.ResponseWriter, r *http.Request) {
+	agreementID := r.PathValue("id")
+	month := r.URL.Query().Get("month")
+
+	var timeSheets []models.TimeSheet
+
+	if len(month) == 1 {
+		month = "0" + month
+	}
+
+	if err := database.DB.Preload("EmployeeCard").Where("agreement_id = ?", agreementID).Where("date LIKE ?", "%-"+month+"-%").Find(&timeSheets).Error; err != nil {
+		msg := "[Error] Ошибка при получении данных из базы"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(timeSheets)
+}
+
 func GetAllAgreementTimeSheethandler(w http.ResponseWriter, r *http.Request) {
 	var agreementID = r.PathValue("id")
 	var timeSheets []models.TimeSheet

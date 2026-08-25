@@ -55,13 +55,11 @@ type EmployeeDocuments struct {
 
 type TimeSheet struct {
 	gorm.Model
-	Date           string `json:"date"`
-	EmployeeCardID uint   `json:"employee_card_id"`
-	AgreementID    uint   `json:"agreement_id"`
-	Status         string `json:"status"`
-
-	// TimeSheetID    uint      `json:"time_sheet_id"`
-	// TimeSheet      TimeSheet `gorm:"foreignKey:TimeSheetID" json:"time_sheet"`
+	Date           string       `json:"date"`
+	EmployeeCard   EmployeeCard `gorm:"foreignKey:EmployeeCardID" json:"employee_card"`
+	EmployeeCardID uint         `json:"employee_card_id"`
+	AgreementID    uint         `json:"agreement_id"`
+	Status         string       `json:"status"`
 }
 
 type User struct {
