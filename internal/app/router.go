@@ -23,6 +23,9 @@ func NewRouter() http.Handler {
 
 	mux.HandleFunc("GET /api/users/{id}", middleware.AuthMiddleware(handlers.GetUserHandler))
 	mux.HandleFunc("GET /api/users", middleware.AuthMiddleware(handlers.GetAllUserHandler))
+	mux.HandleFunc("POST /api/users/update/{id}", middleware.AuthMiddleware(handlers.UpdateUserHandler))
+	mux.HandleFunc("POST /api/users/create", middleware.AuthMiddleware(handlers.CreateUserHandler))
+	mux.HandleFunc("DELETE /api/users/delete/{id}", middleware.AuthMiddleware(handlers.DeleteUserHandler))
 
 	mux.HandleFunc("DELETE /api/materials/delete/{id}", middleware.AuthMiddleware(handlers.DeleteMaterials))
 	mux.HandleFunc("POST /api/materials/create", middleware.AuthMiddleware(handlers.CreateMaterial))

@@ -52,6 +52,28 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(models.Response{Message: "Пользователь успешно создан"})
 }
 
+func UpdateUserHandler(w http.ResponseWriter, r *http.Request) {
+	var userId = r.PathValue("id")
+	var user models.User
+
+	if err := json.NewDecoder(r.Body).Decode(&user); err != nil {
+		msg := "[Error] Ошибка чтения данных"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	if err := database.DB.Model(&models.User{}).Where("id = ?", userId).Select("Login", "Password", "EmployeeCardID").Updates(user).Error; err != nil {
+		msg := "[Error] Ошибка записи данных в базу"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(models.Response{Message: "Данные пользователя усмешно обновлены"})
+}
+
 func DeleteUserHandler(w http.ResponseWriter, r *http.Request) {
 	var userId = r.PathValue("id")
 

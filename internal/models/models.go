@@ -64,10 +64,10 @@ type TimeSheet struct {
 
 type User struct {
 	gorm.Model
-	Login          string `gorm:"unique;not null"`
-	Password       string `json:"-"`
-	EmployeeCardID uint
-	EmployeeCard   EmployeeCard `gorm:"foreignKey:EmployeeCardID"`
+	Login          string       `gorm:"not null" json:"login"`
+	Password       string       `gorm:"not null" json:"password"`
+	EmployeeCardID uint         `json:"employee_card_id"`
+	EmployeeCard   EmployeeCard `gorm:"foreignKey:EmployeeCardID" json:"employee_card"`
 }
 
 type Agreement struct {
