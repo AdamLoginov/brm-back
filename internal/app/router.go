@@ -11,7 +11,7 @@ func NewRouter() http.Handler {
 
 	mux.HandleFunc("GET /api/employeecards", middleware.AuthMiddleware(handlers.GetAllEmployeeCardHandler))
 	mux.HandleFunc("GET /api/employeescard/{id}/detail", middleware.AuthMiddleware(handlers.GetEmployeeCardDetailHandler))
-	mux.HandleFunc("GET /api/employeescard/document/{id}/detail", handlers.GetEmployeeCardDocumentDetailHandler)
+	mux.HandleFunc("GET /api/employeescard/document/{id}/detail", middleware.AuthMiddleware(handlers.GetEmployeeCardDocumentDetailHandler))
 	mux.HandleFunc("GET /api/employeescard/document/category", middleware.AuthMiddleware(handlers.GetAllCategoryEmployeeDocumentHandler))
 	mux.HandleFunc("POST /api/employeescard/document/category/create", middleware.AuthMiddleware(handlers.CreateCategoryEmployeeDocumentHandler))
 	mux.HandleFunc("POST /api/employeescard/create", middleware.AuthMiddleware(handlers.CreateEmployeeCardHandler))
