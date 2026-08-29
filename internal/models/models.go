@@ -1,8 +1,6 @@
 package models
 
 import (
-	"time"
-
 	"gorm.io/gorm"
 )
 
@@ -73,11 +71,13 @@ type User struct {
 type Agreement struct {
 	gorm.Model
 	Name         string         `gorm:"not null" json:"name"`
+	ShortName    string         `json:"short_name"`
 	Number       string         `gorm:"not null" json:"number"`
 	Customer     string         `gorm:"not null" json:"customer"`
 	Address      string         `gorm:"not null" json:"address"`
 	Price        float64        `json:"price"`
-	DueDate      time.Time      `gorm:"type:date" json:"due_date"`
+	DateEnd      string         `json:"date_end"`
+	Status       string         `json:"status"`
 	Estimate     []Estimate     `gorm:"foreignKey:AgreementID" json:"estimate,omitempty"`
 	Expenses     []Expenses     `gorm:"foreignKey:AgreementID" json:"expenses"`
 	Tool         []Tool         `gorm:"foreingKey:AgreementID" json:"tools"`

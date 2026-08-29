@@ -2,10 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"project/internal/database"
 	"project/internal/models"
-	"time"
 )
 
 func GetAllAgreementHandler(w http.ResponseWriter, r *http.Request) {
@@ -33,28 +33,40 @@ func GetDetailAgreementHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func CreateAgreementHandler(w http.ResponseWriter, r *http.Request) {
-	var input struct {
-		Name     string  `json:"name"`
-		Number   string  `json:"number"`
-		Customer string  `json:"customer"`
-		Address  string  `json:"address"`
-		Price    float64 `json:"price"`
-		DueDate  string  `json:"due_date"`
+	var agreement models.Agreement
+
+	if err := json.NewDecoder(r.Body).Decode(&agreement); err != nil {
+		msg := "[Error] Ошибка чтения данных"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
 	}
 
-	json.NewDecoder(r.Body).Decode(&input)
+	if err := database.DB.Create(&agreement).Error; err != nil {
+		msg := "[Error] Ошибка при создании договора"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
 
-	DueDateTime, _ := time.Parse("2006-01-02", input.DueDate)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(models.Response{Message: "Договор успешно создан!"})
+}
 
-	if err := database.DB.Create(&models.Agreement{
-		Name:     input.Name,
-		Number:   input.Number,
-		Customer: input.Customer,
-		Address:  input.Address,
-		Price:    input.Price,
-		DueDate:  DueDateTime,
-	}).Error; err != nil {
-		http.Error(w, "Не удалось создать договор", http.StatusInternalServerError)
+func UpdateAgreementHandler(w http.ResponseWriter, r *http.Request) {
+	var agreement models.Agreement
+
+	if err := json.NewDecoder(r.Body).Decode(&agreement); err != nil {
+		msg := "[Error] Ошибка чтения данных"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	if err := database.DB.Model(&models.Agreement{}).Where("id = ?", agreement.ID).Select("Name", "ShortName", "Number", "Customer", "Address", "Price", "DateEnd", "Status").Updates(agreement).Error; err != nil {
+		msg := "[Error] Ошибка при обновлении данных договора"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
 

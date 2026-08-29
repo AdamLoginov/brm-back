@@ -74,6 +74,7 @@ func NewRouter() http.Handler {
 
 	// Expenses
 	mux.HandleFunc("POST /api/agreements/{id}/expenses/create", middleware.AuthMiddleware(handlers.CreateExpensesHandler))
+	mux.HandleFunc("POST /api/agreements/update/{id}", middleware.AuthMiddleware(handlers.UpdateAgreementHandler))
 	mux.HandleFunc("GET /api/agreements/{id}/expenses", middleware.AuthMiddleware(handlers.GetAgreementExpensesHandler))
 	mux.HandleFunc("DELETE /api/expenses/delete/{id}", middleware.AuthMiddleware(handlers.DeleteExpensesHandleer))
 
