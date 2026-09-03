@@ -192,6 +192,7 @@ type Expenses struct {
 	EmployeeCard   EmployeeCard `gorm:"foreignKey:EmployeeCardId" json:"employee_card"`
 	Name           string       `json:"name"`
 	Price          float64      `json:"price"`
+	Account        string       `json:"account"`
 }
 
 type Tool struct {
