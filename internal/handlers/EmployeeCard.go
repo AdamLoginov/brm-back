@@ -121,7 +121,7 @@ func GetEmployeeCardDocumentDetailHandler(w http.ResponseWriter, r *http.Request
 func CreateEmployeeCardDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	var employeeCardID = r.PathValue("id")
 
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	if err := r.ParseMultipartForm(32 << 25); err != nil {
 		http.Error(w, "Ошибка при парсинге формы", http.StatusBadRequest)
 		return
 	}

@@ -94,6 +94,13 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/emails", middleware.AuthMiddleware(handlers.GetAllEmailsHandler))
 	mux.HandleFunc("GET /api/emails/{id}", middleware.AuthMiddleware(handlers.GetDetailEmailHandler))
 
+	// Блок Task
+	mux.HandleFunc("GET /api/task", middleware.AuthMiddleware(handlers.GetAllTaskHandler))
+	mux.HandleFunc("GET /api/task/success/{id}", middleware.AuthMiddleware(handlers.UpdateStatusTaskHandler))
+	mux.HandleFunc("POST /api/task/create", middleware.AuthMiddleware(handlers.CreateTaskHandler))
+	mux.HandleFunc("POST /api/task/update", middleware.AuthMiddleware(handlers.UpdateTaskHandler))
+	mux.HandleFunc("DELETE /api/task/delete/{id}", middleware.AuthMiddleware(handlers.DeleteTaskHandler))
+
 	// Блок Attachemt (файлы)
 	mux.HandleFunc("GET /api/attachment/{id}", handlers.DownloadAttachmenthandler)
 

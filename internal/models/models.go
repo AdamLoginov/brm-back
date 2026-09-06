@@ -60,6 +60,14 @@ type TimeSheet struct {
 	Status         string       `json:"status"`
 }
 
+type Advance struct {
+	Date           string       `json:"date"`
+	Summ           float64      `json:"summ"`
+	EmployeeCard   EmployeeCard `gorm:"foreignKey:EmployeeCardID" json:"employee_card"`
+	EmployeeCardID uint         `json:"employee_card_id"`
+	AgreementID    uint         `json:"agreement_id"`
+}
+
 type User struct {
 	gorm.Model
 	Login          string       `gorm:"not null" json:"login"`
@@ -202,4 +210,14 @@ type Tool struct {
 	InvNumber    string `json:"inv_number"`
 	SerialNumber string `json:"serial_number"`
 	Status       string `json:"status"`
+}
+
+type Task struct {
+	gorm.Model
+	Message          string       `json:"message"`
+	Status           bool         `json:"status"`
+	ToEmployeeID     uint         `json:"to_employee_id"`
+	ToEmployeeCard   EmployeeCard `gorm:"foreignKey:ToEmployeeID" json:"to_employee_card"`
+	FromEmployeeID   uint         `json:"from_employee_id"`
+	FromEmployeeCard EmployeeCard `gorm:"foreignKey:FromEmployeeID" json:"from_employee_card"`
 }
