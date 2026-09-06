@@ -46,7 +46,14 @@ func CreateTaskHandler(w http.ResponseWriter, r *http.Request) {
 func UpdateTaskHandler(w http.ResponseWriter, r *http.Request) {
 	var task models.Task
 
-	if err := database.DB.Model(&models.Task{}).Where("id = ?", task.ID).Select("Message", "Status", "ToEmployeeID", "FromEmployeeID").Updates(task).Error; err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
+		msg := "[Error] Ошибка при чтении данных обновления задачи"
+		log.Println(msg)
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
+	if err := database.DB.Model(&models.Task{}).Where("id = ?", task.ID).Select("Message", "Status", "Priority", "ToUserID").Updates(task).Error; err != nil {
 		msg := "[Error] Ошибка обновления данных задачи в базу"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)

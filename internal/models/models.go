@@ -220,4 +220,5 @@ type Task struct {
 	ToUser     User   `gorm:"foreignKey:ToUserID" json:"to_user_card"`
 	FromUserID uint   `json:"from_user_id"`
 	FromUser   User   `gorm:"foreignKey:FromUserID" json:"from_user_card"`
+	Priority   uint   `json:"priority"`
 }
