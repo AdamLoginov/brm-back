@@ -11,7 +11,7 @@ import (
 func GetAllTaskHandler(w http.ResponseWriter, r *http.Request) {
 	var tasks []models.Task
 
-	if err := database.DB.Preload("ToEmployeeCard").Preload("FromEmployeeCard").Find(&tasks).Error; err != nil {
+	if err := database.DB.Preload("ToUser.EmployeeCard").Preload("FromUser.EmployeeCard").Find(&tasks).Error; err != nil {
 		msg := "[Error] Ошибка получения данных задач"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)
@@ -27,7 +27,7 @@ func CreateTaskHandler(w http.ResponseWriter, r *http.Request) {
 
 	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
 		msg := "[Error] Ошибка чтения задачи"
-		log.Println(msg)
+		log.Println(msg, err)
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}

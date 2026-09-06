@@ -214,10 +214,10 @@ type Tool struct {
 
 type Task struct {
 	gorm.Model
-	Message          string       `json:"message"`
-	Status           bool         `json:"status"`
-	ToEmployeeID     uint         `json:"to_employee_id"`
-	ToEmployeeCard   EmployeeCard `gorm:"foreignKey:ToEmployeeID" json:"to_employee_card"`
-	FromEmployeeID   uint         `json:"from_employee_id"`
-	FromEmployeeCard EmployeeCard `gorm:"foreignKey:FromEmployeeID" json:"from_employee_card"`
+	Message    string `json:"message"`
+	Status     bool   `json:"status"`
+	ToUserID   uint   `json:"to_user_id"`
+	ToUser     User   `gorm:"foreignKey:ToUserID" json:"to_user_card"`
+	FromUserID uint   `json:"from_user_id"`
+	FromUser   User   `gorm:"foreignKey:FromUserID" json:"from_user_card"`
 }
