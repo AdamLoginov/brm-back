@@ -39,6 +39,7 @@ func InitDB() {
 		&models.CategoryEmployeeDocument{},
 		&models.EmployeeDocuments{},
 		&models.TimeSheet{},
+		&models.TimeSheetMonth{},
 		&models.Advance{},
 		&models.Task{},
 	)

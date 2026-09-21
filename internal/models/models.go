@@ -30,6 +30,7 @@ type EmployeeCard struct {
 	AgreementID       uint                `json:"agreement_id"`
 	Agreement         Agreement           `gorm:"foreignKey:AgreementID; constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"agreement"`
 	EmployeeDocuments []EmployeeDocuments `gorm:"foreignKey:EmployeeCardID;constraint:OnDelete:CASCADE;" json:"employee_documents"`
+	TimeSheetMonths   []TimeSheetMonth    `gorm:"many2many:timesheet_month_employees;" json:"time_sheet_months"`
 }
 
 type CategoryEmployeeDocument struct {
@@ -51,13 +52,23 @@ type EmployeeDocuments struct {
 	CategoryEmployeeDocument   CategoryEmployeeDocument `gorm:"foreignKey:CategoryEmployeeDocumentID" json:"category_document_card"`
 }
 
+type TimeSheetMonth struct {
+	gorm.Model
+	Month       uint           `json:"month"`
+	Year        uint           `json:"year"`
+	AgreementID uint           `json:"agreement_id"`
+	TimeSheets  []TimeSheet    `gorm:"foreignKey:TimeSheetMonthID" json:"time_sheets"`
+	Employees   []EmployeeCard `gorm:"many2many:timesheet_month_employees;" json:"employees"`
+}
+
 type TimeSheet struct {
 	gorm.Model
-	Date           string       `json:"date"`
-	EmployeeCard   EmployeeCard `gorm:"foreignKey:EmployeeCardID" json:"employee_card"`
-	EmployeeCardID uint         `json:"employee_card_id"`
-	AgreementID    uint         `json:"agreement_id"`
-	Status         string       `json:"status"`
+	Date             string       `json:"date"`
+	EmployeeCard     EmployeeCard `gorm:"foreignKey:EmployeeCardID" json:"employee_card"`
+	EmployeeCardID   uint         `json:"employee_card_id"`
+	AgreementID      uint         `json:"agreement_id"`
+	Status           string       `json:"status"`
+	TimeSheetMonthID uint         `json:"time_sheet_month_id"`
 }
 
 type Advance struct {
