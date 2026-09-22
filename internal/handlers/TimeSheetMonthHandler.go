@@ -129,12 +129,24 @@ func UpdateTimeSheetMonthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func DeleteTimeSheetMonthHandler(w http.ResponseWriter, r *http.Request) {
-	var timeSheetMonthId = r.PathValue("id")
+	timeSheetMonthID := r.PathValue("id")
 
-	if err := database.DB.Delete(&models.TimeSheetMonth{}, timeSheetMonthId).Error; err != nil {
-		msg := "[Error] Ошибка при удалении данных"
+	var timeSheetMonth models.TimeSheetMonth
+
+	// Находим табель
+	if err := database.DB.First(&timeSheetMonth, timeSheetMonthID).Error; err != nil {
+
+		msg := "[Error] Табель не найден"
 		log.Println(msg)
-		http.Error(w, msg, http.StatusBadRequest)
+		http.Error(w, msg, http.StatusNotFound)
+		return
+	}
+
+	// Soft delete TimeSheets + самого TimeSheetMonth
+	if err := database.DB.Select("TimeSheets").Delete(&timeSheetMonth).Error; err != nil {
+		msg := "[Error] Ошибка при удалении данных"
+		log.Println(msg, err)
+		http.Error(w, msg, http.StatusInternalServerError)
 		return
 	}
 

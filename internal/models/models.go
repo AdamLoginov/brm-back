@@ -57,7 +57,7 @@ type TimeSheetMonth struct {
 	Month       uint           `json:"month"`
 	Year        uint           `json:"year"`
 	AgreementID uint           `json:"agreement_id"`
-	TimeSheets  []TimeSheet    `gorm:"foreignKey:TimeSheetMonthID" json:"time_sheets"`
+	TimeSheets  []TimeSheet    `gorm:"foreignKey:TimeSheetMonthID;" json:"time_sheets"`
 	Employees   []EmployeeCard `gorm:"many2many:timesheet_month_employees;" json:"employees"`
 }
 
