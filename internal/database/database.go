@@ -22,12 +22,15 @@ func InitDB() {
 	}
 
 	DB.AutoMigrate(
+		&models.Agreement{},
 		&models.EmployeeCard{},
+		&models.EmployeeBalance{},
+		&models.EmployeeDocuments{},
+		&models.CategoryEmployeeDocument{},
 		&models.User{},
 		&models.Materials{},
 		&models.Suplers{},
 		&models.ManagerCard{},
-		&models.Agreement{},
 		&models.Estimate{},
 		&models.Order{},
 		&models.OrderMaterial{},
@@ -36,11 +39,9 @@ func InitDB() {
 		&models.Attachment{},
 		&models.Expenses{},
 		&models.Tool{},
-		&models.CategoryEmployeeDocument{},
-		&models.EmployeeDocuments{},
 		&models.TimeSheet{},
 		&models.TimeSheetMonth{},
-		&models.Advance{},
+		&models.Payment{},
 		&models.Task{},
 	)
 }

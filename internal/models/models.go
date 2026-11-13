@@ -71,12 +71,23 @@ type TimeSheet struct {
 	TimeSheetMonthID uint         `json:"time_sheet_month_id"`
 }
 
-type Advance struct {
+type EmployeeBalance struct {
+	gorm.Model
+	EmployeeCardID uint         `gorm:"uniqueIndex" json:"employee_card_id"`
+	EmployeeCard   EmployeeCard `gorm:"foreignKey:EmployeeCardID" json:"employee_card"`
+	BalanceSalary  float64      `gorm:"default:0" json:"balance_salary"`
+}
+
+type Payment struct {
+	gorm.Model
 	Date           string       `json:"date"`
 	Summ           float64      `json:"summ"`
 	EmployeeCard   EmployeeCard `gorm:"foreignKey:EmployeeCardID" json:"employee_card"`
 	EmployeeCardID uint         `json:"employee_card_id"`
 	AgreementID    uint         `json:"agreement_id"`
+	Message        string       `json:"message"`
+	Status         string       `json:"status"`
+	Flag           string       `json:"flag"`
 }
 
 type User struct {
