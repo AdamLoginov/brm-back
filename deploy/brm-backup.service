@@ -1,0 +1,6 @@
+[Unit]
+Description=Back up BRM data
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/brm-backup

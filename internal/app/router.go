@@ -111,7 +111,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("DELETE /api/task/delete/{id}", middleware.AuthMiddleware(handlers.DeleteTaskHandler))
 
 	// Блок Attachemt (файлы)
-	mux.HandleFunc("GET /api/attachment/{id}", handlers.DownloadAttachmenthandler)
+	mux.HandleFunc("GET /api/attachment/{id}", middleware.AuthMiddleware(handlers.DownloadAttachmenthandler))
 
 	mux.HandleFunc("POST /api/login", handlers.LoginHandler)
 

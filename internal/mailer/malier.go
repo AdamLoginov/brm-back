@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/smtp"
+	"os"
 	"project/internal/models" // Замени на свой путь
 
 	"github.com/jordan-wright/email"
@@ -12,13 +13,15 @@ import (
 
 // Константы для настройки почты
 const (
-	smtpHost     = "smtp.mail.ru"
-	smtpPort     = "465"
-	smtpUser     = "mysnikov2000@mail.ru"
-	smtpPassword = "ZrJfFfb8BcOV5MFdoAuA"
+	smtpHost = "smtp.mail.ru"
+	smtpPort = "465"
+	smtpUser = "mysnikov2000@mail.ru"
 )
 
 func SendOrderEmail(msg models.Email, flagCompanyCard bool) error {
+	if os.Getenv("MAIL_ENABLED") != "true" || os.Getenv("MAIL_PASSWORD") == "" {
+		return fmt.Errorf("почтовая интеграция отключена")
+	}
 	address := smtpHost + ":" + smtpPort
 
 	messageBytes, err := buildMessage(msg, flagCompanyCard)
@@ -43,7 +46,7 @@ func SendOrderEmail(msg models.Email, flagCompanyCard bool) error {
 	}
 	defer client.Quit()
 
-	auth := smtp.PlainAuth("", smtpUser, smtpPassword, smtpHost)
+	auth := smtp.PlainAuth("", smtpUser, os.Getenv("MAIL_PASSWORD"), smtpHost)
 	if err = client.Auth(auth); err != nil {
 		return fmt.Errorf("ошибка авторизации: %w", err)
 	}

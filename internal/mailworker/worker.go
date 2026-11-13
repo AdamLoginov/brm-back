@@ -18,9 +18,8 @@ import (
 )
 
 const (
-	imapHost     = "imap.mail.ru:993"
-	imapUser     = "mysnikov2000@mail.ru"
-	imapPassword = "ZrJfFfb8BcOV5MFdoAuA" // Твой пароль приложения
+	imapHost = "imap.mail.ru:993"
+	imapUser = "mysnikov2000@mail.ru"
 )
 
 func StartEmailMonitoring(db *gorm.DB) {
@@ -100,7 +99,7 @@ func connectIMAP() (*client.Client, error) {
 		return nil, fmt.Errorf("подключение: %w", err)
 	}
 
-	if err := c.Login(imapUser, imapPassword); err != nil {
+	if err := c.Login(imapUser, os.Getenv("MAIL_PASSWORD")); err != nil {
 		c.Logout()
 		return nil, fmt.Errorf("авторизация: %w", err)
 	}

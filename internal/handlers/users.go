@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"golang.org/x/crypto/bcrypt"
 	"log"
 	"net/http"
 	"project/internal/database"
@@ -18,6 +19,7 @@ func GetUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	user.Password = ""
 	json.NewEncoder(w).Encode(user)
 }
 
@@ -30,6 +32,9 @@ func GetAllUserHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	for i := range users {
+		users[i].Password = ""
+	}
 	json.NewEncoder(w).Encode(users)
 }
 
@@ -42,6 +47,16 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if user.Password == "" {
+		http.Error(w, "Password is required", http.StatusBadRequest)
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+	if err != nil {
+		http.Error(w, "Invalid password", http.StatusBadRequest)
+		return
+	}
+	user.Password = string(hash)
 	if err := database.DB.Create(&user).Error; err != nil {
 		log.Println("[ERROR] Ошибка при создании пользователя")
 		http.Error(w, "Ошибка при создании пользователя", http.StatusBadRequest)
@@ -63,7 +78,17 @@ func UpdateUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := database.DB.Model(&models.User{}).Where("id = ?", userId).Select("Login", "Password", "EmployeeCardID").Updates(user).Error; err != nil {
+	fields := []string{"Login", "EmployeeCardID"}
+	if user.Password != "" {
+		hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
+		if err != nil {
+			http.Error(w, "Invalid password", http.StatusBadRequest)
+			return
+		}
+		user.Password = string(hash)
+		fields = append(fields, "Password")
+	}
+	if err := database.DB.Model(&models.User{}).Where("id = ?", userId).Select(fields).Updates(user).Error; err != nil {
 		msg := "[Error] Ошибка записи данных в базу"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)

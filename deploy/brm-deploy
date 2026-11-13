@@ -1,0 +1,119 @@
+#!/usr/bin/python3
+"""Accept a build on stdin, switch releases atomically, roll back unhealthy code."""
+import fcntl
+import json
+import os
+from pathlib import Path, PurePosixPath
+import re
+import shutil
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+import urllib.request
+import urllib.error
+
+ROOT = Path('/opt/brm')
+
+def run(*args):
+    subprocess.run(args, check=True, timeout=180)
+
+def switch(target):
+    link = ROOT / 'current.next'
+    link.unlink(missing_ok=True)
+    link.symlink_to(target)
+    link.replace(ROOT / 'current')
+
+def healthy():
+    try:
+        urllib.request.urlopen('http://127.0.0.1:8080/api/agreements', timeout=3)
+    except urllib.error.HTTPError as error:
+        return error.code == 401
+    except OSError:
+        pass
+    return False
+
+def main():
+    if len(sys.argv) != 3:
+        raise ValueError('Expected component and commit SHA')
+    component, sha = sys.argv[1:]
+    if component not in ('backend', 'frontend') or not re.fullmatch('[0-9a-f]{40}', sha):
+        raise ValueError('Invalid deployment request')
+    with open('/run/lock/brm-deploy.lock', 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        previous = (ROOT / 'current').resolve(strict=True)
+        if previous.parent != ROOT / 'releases':
+            raise ValueError('Current release is outside releases directory')
+        with tempfile.TemporaryDirectory(prefix='brm-ci-', dir=ROOT) as temporary:
+            staging = Path(temporary)
+            unpacked = staging / 'payload'
+            unpacked.mkdir()
+            size = 0
+            with tarfile.open(fileobj=sys.stdin.buffer, mode='r|gz') as archive:
+                for member in archive:
+                    name = PurePosixPath(member.name)
+                    if name.is_absolute() or '..' in name.parts or member.issym() or member.islnk():
+                        raise ValueError('Unsafe archive entry')
+                    if not (member.isdir() or member.isfile()):
+                        raise ValueError('Unsupported archive entry')
+                    size += member.size
+                    if size > 150 * 1024 * 1024:
+                        raise ValueError('Build exceeds size limit')
+                    if component == 'backend' and str(name) not in ('.', 'brm'):
+                        raise ValueError('Backend archive must contain only brm')
+                    target = unpacked.joinpath(*name.parts)
+                    if member.isdir():
+                        target.mkdir(parents=True, exist_ok=True)
+                    else:
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        with archive.extractfile(member) as source, target.open('wb') as output:
+                            shutil.copyfileobj(source, output)
+                        target.chmod(0o644)
+            required = unpacked / ('brm' if component == 'backend' else 'index.html')
+            if not required.is_file():
+                raise ValueError('Build is missing its entry point')
+            if component == 'backend':
+                required.chmod(0o755)
+                run('systemctl', 'start', 'brm-backup.service')
+            release = ROOT / 'releases' / f'ci-{component}-{sha[:12]}-{time.time_ns()}'
+            release.mkdir()
+            shutil.copy2(previous / 'brm', release / 'brm')
+            if component == 'frontend':
+                shutil.copytree(unpacked, release / 'frontend')
+            else:
+                shutil.copytree(previous / 'frontend', release / 'frontend')
+                shutil.copy2(required, release / 'brm')
+            metadata = json.loads((previous / 'release.json').read_text()) if (previous / 'release.json').exists() else {}
+            metadata.update({component: sha, 'previous': str(previous)})
+            (release / 'release.json').write_text(json.dumps(metadata, indent=2)+'\n')
+            switched = False
+            try:
+                switch(release)
+                switched = True
+                if component == 'backend':
+                    run('systemctl', 'restart', 'brm')
+                for _ in range(30):
+                    if healthy():
+                        break
+                    time.sleep(1)
+                else:
+                    raise RuntimeError('Backend health check failed')
+                request = urllib.request.Request('https://brmirk.ru/login')
+                with urllib.request.urlopen(request, timeout=20) as response:
+                    if response.status != 200:
+                        raise RuntimeError('Public frontend health check failed')
+            except Exception:
+                if switched:
+                    switch(previous)
+                    if component == 'backend':
+                        run('systemctl', 'restart', 'brm')
+                raise
+            candidates = sorted((ROOT / 'releases').glob('ci-*'), key=lambda p: p.stat().st_mtime, reverse=True)
+            for old in candidates[5:]:
+                if old != previous and old != release and old.parent == ROOT / 'releases' and not old.is_symlink():
+                    shutil.rmtree(old)
+            print(f'Deployed {component} {sha}; previous release: {previous.name}', flush=True)
+
+if __name__ == '__main__':
+    main()
