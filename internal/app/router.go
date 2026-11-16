@@ -68,6 +68,30 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("DELETE /api/agreements/timesheetmonth/delete/{id}", middleware.AuthMiddleware(handlers.DeleteTimeSheetMonthHandler))
 
 	mux.HandleFunc("GET /api/agreements/{id}/payment", middleware.AuthMiddleware(handlers.GetAllPaymentHandler))
+	// --------- новый код chat: суточные и история выдач внутри договора
+	mux.HandleFunc("GET /api/agreements/{id}/daily-allowance", middleware.AuthMiddleware(handlers.DailyAllowanceTableHandler))
+	mux.HandleFunc("GET /api/agreements/{id}/daily-allowance/payments", middleware.AuthMiddleware(handlers.DailyAllowancePaymentHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/daily-allowance/payments", middleware.AuthMiddleware(handlers.DailyAllowancePaymentHandler))
+	mux.HandleFunc("PUT /api/agreements/{id}/daily-allowance/payments/{paymentId}", middleware.AuthMiddleware(handlers.DailyAllowancePaymentHandler))
+	mux.HandleFunc("DELETE /api/agreements/{id}/daily-allowance/payments/{paymentId}", middleware.AuthMiddleware(handlers.DailyAllowancePaymentHandler))
+	// --------- конец нового кода chat
+	// --------- новый код chat: просмотр и пересчёт начислений выбранного табеля
+	mux.HandleFunc("GET /api/agreements/{id}/timesheetmonth/{monthId}/accruals", middleware.AuthMiddleware(handlers.GetSalaryAccrualHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/timesheetmonth/{monthId}/accruals/calculate", middleware.AuthMiddleware(handlers.CalculateSalaryAccrualHandler))
+	// --------- новый код chat: маршруты авансов договора
+	mux.HandleFunc("GET /api/agreements/{id}/advances", middleware.AuthMiddleware(handlers.SalaryAdvanceHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/advances/create", middleware.AuthMiddleware(handlers.SalaryAdvanceHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/advances/{advanceId}/update", middleware.AuthMiddleware(handlers.SalaryAdvanceHandler))
+	mux.HandleFunc("DELETE /api/agreements/{id}/advances/{advanceId}", middleware.AuthMiddleware(handlers.SalaryAdvanceHandler))
+	// --------- новый код chat: API штрафов
+	mux.HandleFunc("GET /api/agreements/{id}/penalties", middleware.AuthMiddleware(handlers.SalaryPenaltyHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/penalties/create", middleware.AuthMiddleware(handlers.SalaryPenaltyHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/penalties/{penaltyId}/update", middleware.AuthMiddleware(handlers.SalaryPenaltyHandler))
+	mux.HandleFunc("DELETE /api/agreements/{id}/penalties/{penaltyId}", middleware.AuthMiddleware(handlers.SalaryPenaltyHandler))
+	mux.HandleFunc("PATCH /api/agreements/{id}/penalties/{penaltyId}/status", middleware.AuthMiddleware(handlers.SalaryPenaltyHandler)) // новый код chat: простить или восстановить штраф
+	// --------- конец нового кода chat
+	// --------- конец нового кода chat
+	// --------- конец нового кода chat
 	mux.HandleFunc("POST /api/agreements/payments/create", middleware.AuthMiddleware(handlers.CreatePaymentHandler))
 
 	//Estimate

@@ -2,6 +2,7 @@ package models
 
 import (
 	"gorm.io/gorm"
+	"time" // новый код chat: дата закрытия или прощения штрафа
 )
 
 type Response struct {
@@ -54,12 +55,34 @@ type EmployeeDocuments struct {
 
 type TimeSheetMonth struct {
 	gorm.Model
+	// --------- новый код chat: настройки месячного табеля, точные десятичные часы
+	ShiftHours            string `gorm:"not null;default:12" json:"shift_hours"`
+	AbsencePenaltyKopecks int64  `gorm:"not null;default:0" json:"absence_penalty_kopecks"`
+	DailyAllowanceKopecks int64  `gorm:"not null;default:0" json:"daily_allowance_kopecks"` // новый код chat: суточные, пока без начисления
+	// --------- конец нового кода chat
 	Month       uint           `json:"month"`
 	Year        uint           `json:"year"`
 	AgreementID uint           `json:"agreement_id"`
 	TimeSheets  []TimeSheet    `gorm:"foreignKey:TimeSheetMonthID;" json:"time_sheets"`
 	Employees   []EmployeeCard `gorm:"many2many:timesheet_month_employees;" json:"employees"`
+
+	SalaryAccruals []SalaryAccrual `gorm:"foreignKey:TimeSheetMonthID;constraint:OnDelete:CASCADE;" json:"salary_accruals,omitempty"` // новый код chat: начисления табеля
 }
+
+// --------- новый код chat: сохранённое начисление сотрудника по табелю
+type SalaryAccrual struct {
+	gorm.Model
+	TimeSheetMonthID  uint   `gorm:"not null;uniqueIndex:idx_salary_accrual_employee_month" json:"time_sheet_month_id"`
+	EmployeeCardID    uint   `gorm:"not null;uniqueIndex:idx_salary_accrual_employee_month" json:"employee_card_id"`
+	AgreementID       uint   `gorm:"not null;index" json:"agreement_id"`
+	EmployeeName      string `json:"employee_name"`
+	TotalHours        string `json:"total_hours"`
+	ShiftHours        string `json:"shift_hours"` // новый код chat: дробная норма из табеля
+	SalaryRateKopecks int64  `json:"salary_rate_kopecks"`
+	AmountKopecks     int64  `json:"amount_kopecks"`
+}
+
+// --------- конец нового кода chat
 
 type TimeSheet struct {
 	gorm.Model
@@ -214,6 +237,67 @@ type Attachment struct {
 	MimeType string `json:"mime_type"`
 	EmailID  uint   `json:"email_id"`
 }
+
+// --------- новый код chat: выплаченные авансы, сохраняемые отдельно от начислений
+// --------- новый код chat: начисления суточных за дни и фактические выдачи
+type DailyAllowanceAccrual struct {
+	gorm.Model
+	AgreementID      uint   `gorm:"index;not null" json:"agreement_id"`
+	TimeSheetMonthID uint   `gorm:"uniqueIndex:idx_daily_accrual_day;not null" json:"time_sheet_month_id"`
+	EmployeeCardID   uint   `gorm:"uniqueIndex:idx_daily_accrual_day;not null" json:"employee_card_id"`
+	Date             string `gorm:"uniqueIndex:idx_daily_accrual_day;not null" json:"date"`
+	EmployeeName     string `json:"employee_name"`
+	AmountKopecks    int64  `json:"amount_kopecks"`
+}
+
+type DailyAllowancePayment struct {
+	gorm.Model
+	AgreementID      uint   `gorm:"uniqueIndex:idx_daily_payment_request;index;not null" json:"agreement_id"`
+	EmployeeCardID   uint   `gorm:"uniqueIndex:idx_daily_payment_request;not null" json:"employee_card_id"`
+	RequestKey       string `gorm:"uniqueIndex:idx_daily_payment_request;not null" json:"-"`
+	RequestHash      string `json:"-"`
+	TimeSheetMonthID uint   `gorm:"index;not null" json:"time_sheet_month_id"`
+	EmployeeName     string `json:"employee_name"`
+	Date             string `json:"date"`
+	AmountKopecks    int64  `json:"amount_kopecks"`
+}
+
+// --------- конец нового кода chat
+
+type SalaryAdvance struct {
+	gorm.Model
+	AgreementID    uint   `gorm:"index" json:"agreement_id"`
+	EmployeeCardID uint   `gorm:"index" json:"employee_card_id"`
+	EmployeeName   string `json:"employee_name"`
+	Date           string `json:"date"`
+	AmountKopecks  int64  `gorm:"check:amount_kopecks > 0" json:"amount_kopecks"`
+	Comment        string `json:"comment"`
+	IsSettled      bool   `gorm:"default:false" json:"is_settled"`
+}
+
+// --------- конец нового кода chat
+
+// --------- новый код chat: штрафы по дате назначения
+type SalaryPenalty struct {
+	gorm.Model
+	// --------- новый код chat: источник автоматического штрафа, nil для ручного
+	SourceTimeSheetMonthID *uint   `gorm:"index" json:"source_time_sheet_month_id"`
+	SourceTimeSheetID      *uint   `gorm:"index" json:"source_time_sheet_id"`
+	SourceTimeSheetKey     *string `gorm:"uniqueIndex" json:"-"`
+	// --------- конец нового кода chat
+	AgreementID    uint   `gorm:"index" json:"agreement_id"`
+	EmployeeCardID uint   `gorm:"index" json:"employee_card_id"`
+	EmployeeName   string `json:"employee_name"`
+	Date           string `gorm:"index" json:"date"`
+	AmountKopecks  int64  `gorm:"check:amount_kopecks > 0" json:"amount_kopecks"`
+	Comment        string `json:"comment"`
+	// --------- новый код chat: прежние штрафы получают статус active при миграции
+	Status   string     `gorm:"not null;default:active" json:"status"`
+	ClosedAt *time.Time `json:"closed_at"`
+	// --------- конец нового кода chat
+}
+
+// --------- конец нового кода chat
 
 type Expenses struct {
 	gorm.Model

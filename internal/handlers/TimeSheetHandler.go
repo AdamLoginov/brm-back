@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"project/internal/database"
 	"project/internal/models"
+	"project/internal/service" // новый код chat: синхронизация штрафов
 )
 
 func GetAllTimeSheethandler(w http.ResponseWriter, r *http.Request) {
@@ -79,7 +80,7 @@ func CreateTimeSheetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := database.DB.Create(&timeSheet).Error; err != nil {
+	if err := service.ChangeTimeSheetEntries(database.DB, timeSheet, "create"); err != nil { // новый код chat: отметки и штрафы в транзакции
 		msg := "[Error] Ошибка при записи данных в базу"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)
@@ -99,14 +100,13 @@ func UpdateTimeSheetHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
-	for _, timeSheet := range timeSheets {
-		if err := database.DB.Model(&models.TimeSheet{}).Where("id = ?", timeSheet.ID).Update("status", timeSheet.Status).Error; err != nil {
-			msg := "[Error] Ошибка при записи данных в базу"
-			log.Println(msg)
-			http.Error(w, msg, http.StatusBadRequest)
-			return
-		}
+	// --------- новый код chat: смена отметок и удаление / создание штрафов вместе
+	if err := service.ChangeTimeSheetEntries(database.DB, timeSheets, "update"); err != nil {
+		log.Println(err)
+		http.Error(w, "Не удалось обновить табель и штрафы", http.StatusBadRequest)
+		return
 	}
+	// --------- конец нового кода chat
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(timeSheets)
@@ -122,18 +122,13 @@ func DeleteTimeSheetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var ids []uint
-
-	for _, timeSheet := range timeSheets {
-		ids = append(ids, timeSheet.ID)
-	}
-
-	if err := database.DB.Where("id IN ?", ids).Delete(&models.TimeSheet{}).Error; err != nil {
-		msg := "[Error] Ошибка при удалении данных"
-		log.Println(msg)
-		http.Error(w, msg, http.StatusBadRequest)
+	// --------- новый код chat: очистка ячеек удаляет связанные штрафы любого статуса
+	if err := service.ChangeTimeSheetEntries(database.DB, timeSheets, "delete"); err != nil {
+		log.Println(err)
+		http.Error(w, "Не удалось удалить отметки и штрафы", http.StatusBadRequest)
 		return
 	}
+	// --------- конец нового кода chat
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(timeSheets)

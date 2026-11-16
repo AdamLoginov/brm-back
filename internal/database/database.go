@@ -41,6 +41,11 @@ func InitDB() {
 		&models.Tool{},
 		&models.TimeSheet{},
 		&models.TimeSheetMonth{},
+		&models.SalaryAccrual{},         // новый код chat: таблица начислений
+		&models.SalaryAdvance{},         // новый код chat: таблица авансов
+		&models.SalaryPenalty{},         // новый код chat: таблица штрафов
+		&models.DailyAllowanceAccrual{}, // новый код chat: начисления суточных
+		&models.DailyAllowancePayment{}, // новый код chat: история выдач суточных
 		&models.Payment{},
 		&models.Task{},
 	)
