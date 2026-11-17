@@ -22,6 +22,7 @@ func InitDB() {
 	}
 
 	DB.AutoMigrate(
+		&models.Notification{},                         // новый код chat: уведомления задач
 		&models.SalaryApprovalBatch{},                  // новый код chat: идемпотентное применение выбора
 		&models.SalaryPaymentDraft{},                   // --------- новый код chat: индивидуальные выплаты и согласования
 		&models.SalaryDebt{}, &models.SalaryApproval{}, // новый код chat: долги и согласования

@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context" // новый код chat: пользователь из проверенного JWT
 	"net/http"
 	"project/internal/config"
 	"strings"
@@ -8,6 +9,12 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// --------- новый код chat: ID пользователя не принимается из тела запроса
+type authUserKey struct{}
+
+func CurrentUserID(r *http.Request) uint { id, _ := r.Context().Value(authUserKey{}).(uint); return id }
+
+// --------- конец нового кода chat
 func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
@@ -28,6 +35,12 @@ func AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
+		// новый код chat: сохраняем пользователя для персональных операций
+		if claims, ok := token.Claims.(jwt.MapClaims); ok {
+			if id, valid := claims["user_id"].(float64); valid && id > 0 && id == float64(uint(id)) {
+				r = r.WithContext(context.WithValue(r.Context(), authUserKey{}, uint(id)))
+			}
+		}
 		next(w, r)
 	}
 }

@@ -148,8 +148,13 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/emails/{id}", middleware.AuthMiddleware(handlers.GetDetailEmailHandler))
 
 	// Блок Task
+	// --------- новый код chat: личная лента и явное прочтение
+	mux.HandleFunc("GET /api/notifications", middleware.AuthMiddleware(handlers.GetNotificationsHandler))
+	mux.HandleFunc("POST /api/notifications/read-all", middleware.AuthMiddleware(handlers.ReadAllNotificationsHandler))
+	mux.HandleFunc("POST /api/notifications/{id}/read", middleware.AuthMiddleware(handlers.ReadNotificationHandler))
+	// --------- конец нового кода chat
 	mux.HandleFunc("GET /api/task", middleware.AuthMiddleware(handlers.GetAllTaskHandler))
-	mux.HandleFunc("GET /api/task/success/{id}", middleware.AuthMiddleware(handlers.UpdateStatusTaskHandler))
+	mux.HandleFunc("POST /api/task/success/{id}", middleware.AuthMiddleware(handlers.UpdateStatusTaskHandler))
 	mux.HandleFunc("POST /api/task/create", middleware.AuthMiddleware(handlers.CreateTaskHandler))
 	mux.HandleFunc("POST /api/task/update", middleware.AuthMiddleware(handlers.UpdateTaskHandler))
 	mux.HandleFunc("DELETE /api/task/delete/{id}", middleware.AuthMiddleware(handlers.DeleteTaskHandler))

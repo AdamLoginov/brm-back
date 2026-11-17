@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"project/internal/database"
 	"project/internal/models"
+	"project/internal/service" // новый код chat
+	"strconv"                  // новый код chat
 )
 
 func GetAllTaskHandler(w http.ResponseWriter, r *http.Request) {
@@ -22,72 +24,66 @@ func GetAllTaskHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(tasks)
 }
 
+// --------- новый код chat: автор из JWT, события задачи сохраняются атомарно
 func CreateTaskHandler(w http.ResponseWriter, r *http.Request) {
-	var task models.Task
-
-	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
-		msg := "[Error] Ошибка чтения задачи"
-		log.Println(msg, err)
-		http.Error(w, msg, http.StatusBadRequest)
+	actor := notificationUser(w, r)
+	if actor == 0 {
 		return
 	}
-
-	if err := database.DB.Create(&task).Error; err != nil {
-		msg := "[Error] Ошибка записи задачи в базу данных"
-		log.Println(msg)
-		http.Error(w, msg, http.StatusBadRequest)
+	var input models.Task
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024*1024)).Decode(&input); err != nil {
+		http.Error(w, "Некорректная задача", 400)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(task)
+	result, err := service.CreateTaskWithNotifications(database.DB, actor, input)
+	notificationResponse(w, result, err)
 }
-
 func UpdateTaskHandler(w http.ResponseWriter, r *http.Request) {
-	var task models.Task
-
-	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
-		msg := "[Error] Ошибка при чтении данных обновления задачи"
-		log.Println(msg)
-		http.Error(w, msg, http.StatusBadRequest)
+	actor := notificationUser(w, r)
+	if actor == 0 {
 		return
 	}
-
-	if err := database.DB.Model(&models.Task{}).Where("id = ?", task.ID).Select("Message", "Status", "Priority", "ToUserID").Updates(task).Error; err != nil {
-		msg := "[Error] Ошибка обновления данных задачи в базу"
-		log.Println(msg)
-		http.Error(w, msg, http.StatusBadRequest)
+	var input models.Task
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024*1024)).Decode(&input); err != nil {
+		http.Error(w, "Некорректная задача", 400)
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(task)
+	result, err := service.UpdateTaskWithNotifications(database.DB, actor, input, false)
+	notificationResponse(w, result, err)
 }
-
+func taskRequestID(w http.ResponseWriter, r *http.Request) uint {
+	id, err := strconv.ParseUint(r.PathValue("id"), 10, 32)
+	if err != nil || id == 0 {
+		http.Error(w, "Некорректная задача", 400)
+		return 0
+	}
+	return uint(id)
+}
 func UpdateStatusTaskHandler(w http.ResponseWriter, r *http.Request) {
-	var taskId = r.PathValue("id")
-
-	if err := database.DB.Model(&models.Task{}).Where("id = ?", taskId).Update("Status", true).Error; err != nil {
-		msg := "[Error] Ошибка обновления данных задачи в базу"
-		log.Println(msg)
-		http.Error(w, msg, http.StatusBadRequest)
+	actor := notificationUser(w, r)
+	if actor == 0 {
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(models.Response{Message: "Успешно изменено"})
+	id := taskRequestID(w, r)
+	if id == 0 {
+		return
+	}
+	input := models.Task{}
+	input.ID = id
+	result, err := service.UpdateTaskWithNotifications(database.DB, actor, input, true)
+	notificationResponse(w, result, err)
 }
-
 func DeleteTaskHandler(w http.ResponseWriter, r *http.Request) {
-	var taskId = r.PathValue("id")
-
-	if err := database.DB.Delete(&models.Task{}, taskId).Error; err != nil {
-		msg := "[Error] Ошибка при удалении данных"
-		log.Println(msg)
-		http.Error(w, msg, http.StatusBadRequest)
+	actor := notificationUser(w, r)
+	if actor == 0 {
 		return
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(models.Response{Message: "Данные успешно удалены"})
+	id := taskRequestID(w, r)
+	if id == 0 {
+		return
+	}
+	err := service.DeleteTaskWithNotifications(database.DB, actor, id)
+	notificationResponse(w, models.Response{Message: "Задача и связанные уведомления удалены"}, err)
 }
+
+// --------- конец нового кода chat

@@ -401,3 +401,17 @@ type Task struct {
 	FromUser   User   `gorm:"foreignKey:FromUserID" json:"from_user_card"`
 	Priority   uint   `json:"priority"`
 }
+
+// --------- новый код chat: личные уведомления о событиях задач
+type Notification struct {
+	gorm.Model
+	RecipientID uint       `gorm:"index:idx_notification_recipient;not null" json:"recipient_id"`
+	TaskID      uint       `gorm:"index;not null" json:"task_id"`
+	ActorID     uint       `json:"actor_id"`
+	ActorName   string     `json:"actor_name"`
+	Kind        string     `json:"kind"`
+	TaskMessage string     `json:"task_message"`
+	ReadAt      *time.Time `json:"read_at"`
+}
+
+// --------- конец нового кода chat
