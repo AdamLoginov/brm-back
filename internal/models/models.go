@@ -393,13 +393,14 @@ type Tool struct {
 
 type Task struct {
 	gorm.Model
-	Message    string `json:"message"`
-	Status     bool   `json:"status"`
-	ToUserID   uint   `json:"to_user_id"`
-	ToUser     User   `gorm:"foreignKey:ToUserID" json:"to_user_card"`
-	FromUserID uint   `json:"from_user_id"`
-	FromUser   User   `gorm:"foreignKey:FromUserID" json:"from_user_card"`
-	Priority   uint   `json:"priority"`
+	CompletedAt *time.Time `json:"completed_at"` // новый код chat: время последнего выполнения, nil до выполнения
+	Message     string     `json:"message"`
+	Status      bool       `json:"status"`
+	ToUserID    uint       `json:"to_user_id"`
+	ToUser      User       `gorm:"foreignKey:ToUserID" json:"to_user_card"`
+	FromUserID  uint       `json:"from_user_id"`
+	FromUser    User       `gorm:"foreignKey:FromUserID" json:"from_user_card"`
+	Priority    uint       `json:"priority"`
 }
 
 // --------- новый код chat: личные уведомления о событиях задач

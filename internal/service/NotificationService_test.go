@@ -9,6 +9,7 @@ import (
 	"project/internal/models"
 	"sync"
 	"testing"
+	"time"
 )
 
 func notificationFixture(t *testing.T) (*gorm.DB, []models.User) {
@@ -183,6 +184,60 @@ func TestTaskNotificationTransactionRollback(t *testing.T) {
 	db.Model(&models.Notification{}).Count(&count)
 	if count != 0 {
 		t.Fatal("backfill")
+	}
+}
+
+// --------- конец нового кода chat
+
+// --------- новый код chat: время выполнения задаёт сервер и сохраняет до возврата в работу
+func TestTaskCompletionTime(t *testing.T) {
+	db, u := notificationFixture(t)
+	fake := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+	task, err := CreateTaskWithNotifications(db, u[0].ID, models.Task{Message: "Дата", ToUserID: u[1].ID, CompletedAt: &fake})
+	if err != nil || task.CompletedAt != nil {
+		t.Fatal("client supplied completion time", err)
+	}
+	before := time.Now().UTC()
+	task, err = UpdateTaskWithNotifications(db, u[1].ID, task, true)
+	if err != nil || task.CompletedAt == nil || task.CompletedAt.Before(before) {
+		t.Fatal("completion missing", err)
+	}
+	first := *task.CompletedAt
+	task.CompletedAt = &fake
+	task.Message = "Изменён текст"
+	task, err = UpdateTaskWithNotifications(db, u[0].ID, task, false)
+	if err != nil || task.CompletedAt == nil || !task.CompletedAt.Equal(first) {
+		t.Fatal("editing replaced completion", err)
+	}
+	task, err = UpdateTaskWithNotifications(db, u[0].ID, task, true)
+	if err != nil || !task.CompletedAt.Equal(first) {
+		t.Fatal("repeat changed time", err)
+	}
+	task.Status = false
+	task, err = UpdateTaskWithNotifications(db, u[0].ID, task, false)
+	if err != nil || task.CompletedAt != nil {
+		t.Fatal("reopen retained time", err)
+	}
+	var persisted models.Task
+	db.First(&persisted, task.ID)
+	if persisted.CompletedAt != nil {
+		t.Fatal("database time not cleared")
+	}
+	task.Status = true
+	task, err = UpdateTaskWithNotifications(db, u[1].ID, task, false)
+	if err != nil || task.CompletedAt == nil || !task.CompletedAt.After(first) {
+		t.Fatal("second completion", err)
+	}
+	persisted = models.Task{}
+	db.First(&persisted, task.ID)
+	if persisted.CompletedAt == nil || !persisted.CompletedAt.Equal(*task.CompletedAt) {
+		t.Fatal("time not persisted")
+	}
+	legacy := models.Task{Message: "Старая задача", Status: true, FromUserID: u[0].ID, ToUserID: u[1].ID}
+	db.Create(&legacy)
+	legacy, err = UpdateTaskWithNotifications(db, u[0].ID, legacy, false)
+	if err != nil || legacy.CompletedAt != nil {
+		t.Fatal("invented historical date", err)
 	}
 }
 

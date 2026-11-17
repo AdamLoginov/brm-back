@@ -81,7 +81,15 @@ func UpdateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task, c
 		if err = taskRecipient(tx, task.ToUserID); err != nil {
 			return err
 		}
-		if err = tx.Model(&task).Select("Message", "Status", "Priority", "ToUserID").Updates(&task).Error; err != nil {
+		// --------- новый код chat: дата фиксируется только при переходе в выполненное состояние
+		if !previousStatus && task.Status {
+			now := time.Now().UTC()
+			task.CompletedAt = &now
+		} else if !task.Status {
+			task.CompletedAt = nil
+		}
+		// --------- конец нового кода chat
+		if err = tx.Model(&task).Select("Message", "Status", "Priority", "ToUserID", "CompletedAt").Updates(&task).Error; err != nil { // новый код chat: сохраняем дату, включая очистку
 			return err
 		}
 		// Возврат с переназначением даёт новому исполнителю одно уведомление о возврате.
