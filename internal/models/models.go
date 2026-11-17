@@ -11,22 +11,26 @@ type Response struct {
 
 type EmployeeCard struct {
 	gorm.Model
-	Name              string              `gorm:"not null" json:"name"`
-	MiddleName        *string             `json:"middle_name"`
-	Surname           *string             `json:"surname"`
-	Phone             *string             `json:"phone"`
-	Email             string              `json:"email"`
-	DateOfBirht       string              `json:"date_of_birth"`
-	PlaceOFResidence  string              `json:"place_of_residence"`
-	MaritalStatus     string              `json:"marital_status"`
-	StartDate         string              `json:"start_date"`
-	Expenses          string              `json:"experience"`
-	Education         string              `json:"education"`
-	PasportNumber     string              `json:"pasport_number"`
-	PasportSerial     string              `json:"pasport_serial"`
-	Snils             string              `json:"snils"`
-	Profession        *string             `json:"profession"`
-	SalaryRate        string              `json:"salary_rate"`
+	Name             string  `gorm:"not null" json:"name"`
+	MiddleName       *string `json:"middle_name"`
+	Surname          *string `json:"surname"`
+	Phone            *string `json:"phone"`
+	Email            string  `json:"email"`
+	DateOfBirht      string  `json:"date_of_birth"`
+	PlaceOFResidence string  `json:"place_of_residence"`
+	MaritalStatus    string  `json:"marital_status"`
+	StartDate        string  `json:"start_date"`
+	Expenses         string  `json:"experience"`
+	Education        string  `json:"education"`
+	PasportNumber    string  `json:"pasport_number"`
+	PasportSerial    string  `json:"pasport_serial"`
+	Snils            string  `json:"snils"`
+	Profession       *string `json:"profession"`
+	SalaryRate       string  `json:"salary_rate"`
+	// --------- новый код chat: официальное трудоустройство и месячная зарплата в копейках
+	OfficiallyEmployed   bool  `gorm:"not null;default:false" json:"officially_employed"`
+	MonthlySalaryKopecks int64 `gorm:"not null;default:0" json:"monthly_salary_kopecks"`
+	// --------- конец нового кода chat
 	Status            bool                `json:"status"`
 	AgreementID       uint                `json:"agreement_id"`
 	Agreement         Agreement           `gorm:"foreignKey:AgreementID; constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"agreement"`

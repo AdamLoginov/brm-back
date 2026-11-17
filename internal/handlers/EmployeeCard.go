@@ -59,7 +59,15 @@ func GetAllEmployeeCardHandler(w http.ResponseWriter, r *http.Request) {
 func CreateEmployeeCardHandler(w http.ResponseWriter, r *http.Request) {
 	var employeeCard models.EmployeeCard
 
-	json.NewDecoder(r.Body).Decode(&employeeCard)
+	// --------- новый код chat: проверка типов и новых полей карточки
+	if err := json.NewDecoder(r.Body).Decode(&employeeCard); err != nil {
+		http.Error(w, "Некорректные данные карточки сотрудника", http.StatusBadRequest)
+		return
+	}
+	if !validateEmployeeEmployment(w, &employeeCard) {
+		return
+	}
+	// --------- конец нового кода chat
 	if err := database.DB.Create(&employeeCard).Error; err != nil {
 		msg := "[Error] Не удалось создать карточку сотрудника"
 		log.Println(msg)
@@ -82,6 +90,9 @@ func UpdateEmployeeCardHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validateEmployeeEmployment(w, &employeeCard) {
+		return
+	} // новый код chat: проверка месячной зарплаты при изменении
 	if err := database.DB.Model(&models.EmployeeCard{}).Where("id = ?", employeeCardID).Select("*").
 		Omit("id", "created_at", "updated_at", "agreement", "employee_documents").Updates(employeeCard).Error; err != nil {
 		msg := "[Error] Ошибка при обнавлении данных"
