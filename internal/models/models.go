@@ -279,6 +279,49 @@ type SalaryAdvance struct {
 	IsSettled      bool   `gorm:"default:false" json:"is_settled"`
 }
 
+// --------- новый код chat: премии за конкретный месяц договора
+type SalaryBonus struct {
+	gorm.Model
+	AgreementID    uint   `gorm:"index;not null" json:"agreement_id"`
+	EmployeeCardID uint   `gorm:"index;not null" json:"employee_card_id"`
+	EmployeeName   string `json:"employee_name"`
+	Month          uint   `gorm:"not null" json:"month"`
+	Year           uint   `gorm:"not null" json:"year"`
+	AmountKopecks  int64  `gorm:"not null;check:amount_kopecks > 0" json:"amount_kopecks"`
+	Comment        string `json:"comment"`
+	IsPaid         bool   `gorm:"not null;default:false" json:"is_paid"`
+}
+
+// --------- новый код chat: долги и сохранённые согласования начислений
+type SalaryDebt struct {
+	gorm.Model
+	AgreementID      uint   `gorm:"index;not null" json:"agreement_id"`
+	EmployeeCardID   uint   `gorm:"index;not null" json:"employee_card_id"`
+	EmployeeName     string `json:"employee_name"`
+	Date             string `json:"date"`
+	AmountKopecks    int64  `gorm:"not null;check:amount_kopecks > 0" json:"amount_kopecks"`
+	Side             string `gorm:"not null" json:"side"`
+	Comment          string `json:"comment"`
+	IsClosed         bool   `gorm:"not null;default:false" json:"is_closed"`
+	SourceApprovalID *uint  `gorm:"index" json:"source_approval_id"`
+}
+
+type SalaryApproval struct {
+	gorm.Model
+	AgreementID      uint   `gorm:"index;not null" json:"agreement_id"`
+	TimeSheetMonthID uint   `gorm:"index;not null" json:"time_sheet_month_id"`
+	ActiveMonthID    *uint  `gorm:"uniqueIndex" json:"-"`
+	Date             string `json:"date"`
+	RequestKey       string `gorm:"uniqueIndex;not null" json:"-"`
+	RequestHash      string `json:"-"`
+	Snapshot         string `gorm:"type:text" json:"-"`
+	Changes          string `gorm:"type:text" json:"-"`
+}
+
+// --------- конец нового кода chat
+
+// --------- конец нового кода chat
+
 // --------- конец нового кода chat
 
 // --------- новый код chat: штрафы по дате назначения
@@ -305,6 +348,7 @@ type SalaryPenalty struct {
 
 type Expenses struct {
 	gorm.Model
+	IsReimbursed   bool         `gorm:"not null;default:false" json:"is_reimbursed"` // новый код chat: возмещён ли личный расход
 	AgreementId    uint         `json:"agreement_id"`
 	EmployeeCardId uint         `json:"employee_card_id"`
 	EmployeeCard   EmployeeCard `gorm:"foreignKey:EmployeeCardId" json:"employee_card"`

@@ -106,6 +106,23 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/agreements", middleware.AuthMiddleware(handlers.GetAllAgreementHandler))
 
 	// Expenses
+	// --------- новый код chat: долги и согласование начислений
+	mux.HandleFunc("GET /api/agreements/{id}/debts", middleware.AuthMiddleware(handlers.SalaryDebtHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/debts/create", middleware.AuthMiddleware(handlers.SalaryDebtHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/debts/{debtId}/update", middleware.AuthMiddleware(handlers.SalaryDebtHandler))
+	mux.HandleFunc("DELETE /api/agreements/{id}/debts/{debtId}", middleware.AuthMiddleware(handlers.SalaryDebtHandler))
+	mux.HandleFunc("PATCH /api/agreements/{id}/debts/{debtId}/status", middleware.AuthMiddleware(handlers.SalaryDebtHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/timesheetmonth/{monthId}/approval", middleware.AuthMiddleware(handlers.SalaryApprovalHandler))
+	mux.HandleFunc("DELETE /api/agreements/{id}/timesheetmonth/{monthId}/approval", middleware.AuthMiddleware(handlers.SalaryApprovalHandler))
+	// --------- конец нового кода chat
+	// --------- новый код chat: премии договора
+	mux.HandleFunc("GET /api/agreements/{id}/bonuses", middleware.AuthMiddleware(handlers.SalaryBonusHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/bonuses/create", middleware.AuthMiddleware(handlers.SalaryBonusHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/bonuses/{bonusId}/update", middleware.AuthMiddleware(handlers.SalaryBonusHandler))
+	mux.HandleFunc("DELETE /api/agreements/{id}/bonuses/{bonusId}", middleware.AuthMiddleware(handlers.SalaryBonusHandler))
+	mux.HandleFunc("PATCH /api/agreements/{id}/bonuses/{bonusId}/status", middleware.AuthMiddleware(handlers.SalaryBonusHandler))
+	// --------- конец нового кода chat
+	mux.HandleFunc("PATCH /api/agreements/{id}/expenses/{expenseId}/status", middleware.AuthMiddleware(handlers.UpdateExpenseReimbursementHandler)) // новый код chat: статус возмещения
 	mux.HandleFunc("POST /api/agreements/{id}/expenses/create", middleware.AuthMiddleware(handlers.CreateExpensesHandler))
 	mux.HandleFunc("POST /api/agreements/update/{id}", middleware.AuthMiddleware(handlers.UpdateAgreementHandler))
 	mux.HandleFunc("GET /api/agreements/{id}/expenses", middleware.AuthMiddleware(handlers.GetAgreementExpensesHandler))

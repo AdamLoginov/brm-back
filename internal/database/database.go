@@ -22,6 +22,8 @@ func InitDB() {
 	}
 
 	DB.AutoMigrate(
+		&models.SalaryDebt{}, &models.SalaryApproval{}, // новый код chat: долги и согласования
+		&models.SalaryBonus{}, // новый код chat: премии за месяц
 		&models.Agreement{},
 		&models.EmployeeCard{},
 		&models.EmployeeBalance{},

@@ -24,7 +24,7 @@ func TestSalaryAccrualAPIAndMonthDeletion(t *testing.T) {
 	previousDB := database.DB
 	database.DB = db
 	t.Cleanup(func() { database.DB = previousDB; sqlDB, _ := db.DB(); sqlDB.Close() })
-	if err := db.AutoMigrate(&models.Agreement{}, &models.EmployeeCard{}, &models.TimeSheetMonth{}, &models.TimeSheet{}, &models.SalaryAccrual{}, &models.SalaryAdvance{}, &models.SalaryPenalty{}, &models.DailyAllowanceAccrual{}); err != nil { // новый код chat: авансы в тестовой БД
+	if err := db.AutoMigrate(&models.Agreement{}, &models.EmployeeCard{}, &models.TimeSheetMonth{}, &models.TimeSheet{}, &models.SalaryAccrual{}, &models.SalaryAdvance{}, &models.SalaryPenalty{}, &models.DailyAllowanceAccrual{}, &models.Expenses{}, &models.SalaryBonus{}, &models.SalaryDebt{}, &models.SalaryApproval{}); err != nil { // новый код chat: авансы в тестовой БД
 		t.Fatal(err)
 	}
 	agreement := models.Agreement{Name: "Договор", Number: "1"}
@@ -61,7 +61,12 @@ func TestSalaryAccrualAPIAndMonthDeletion(t *testing.T) {
 		t.Fatal("unknown agreement must return 404")
 	}
 	before := call(GetSalaryAccrualHandler, "GET", aID, mID)
-	if before.Code != 200 || before.Body.String() != "{\"accruals\":[],\"total_kopecks\":0,\"total_advances_kopecks\":0,\"total_payable_kopecks\":0,\"total_penalties_kopecks\":0}\n" { // новый код chat: итоги с авансами
+	// --------- новый код chat: проверка пустого ответа с новым итогом вычета
+	var empty map[string]json.RawMessage
+	if err := json.Unmarshal(before.Body.Bytes(), &empty); err != nil {
+		t.Fatal(err)
+	}
+	if before.Code != 200 || string(empty["accruals"]) != "[]" || string(empty["total_deduction_kopecks"]) != "0" || string(empty["total_payable_kopecks"]) != "0" {
 		t.Fatalf("empty response: %s", before.Body.String())
 	}
 	// --------- новый код chat: API возвращает штрафы и остаток за месяц
@@ -72,12 +77,16 @@ func TestSalaryAccrualAPIAndMonthDeletion(t *testing.T) {
 	var body struct {
 		Accruals []struct {
 			models.SalaryAccrual
-			PenaltiesKopecks int64 `json:"penalties_kopecks"`
-			PayableKopecks   int64 `json:"payable_kopecks"`
+			PenaltiesKopecks     int64 `json:"penalties_kopecks"`
+			PayableKopecks       int64 `json:"payable_kopecks"`
+			OfficiallyEmployed   bool  `json:"officially_employed"`    // новый код chat
+			MonthlySalaryKopecks int64 `json:"monthly_salary_kopecks"` // новый код chat
+			DeductionKopecks     int64 `json:"deduction_kopecks"`      // новый код chat
 		} `json:"accruals"`
 		TotalKopecks          int64 `json:"total_kopecks"`
 		TotalPenaltiesKopecks int64 `json:"total_penalties_kopecks"`
 		TotalPayableKopecks   int64 `json:"total_payable_kopecks"`
+		TotalDeductionKopecks int64 `json:"total_deduction_kopecks"` // новый код chat
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
@@ -85,6 +94,71 @@ func TestSalaryAccrualAPIAndMonthDeletion(t *testing.T) {
 	if response.Code != 200 || len(body.Accruals) != 1 || body.TotalKopecks != 500000 || body.TotalPenaltiesKopecks != 12345 || body.TotalPayableKopecks != 487655 || body.Accruals[0].PenaltiesKopecks != 12345 || body.Accruals[0].PayableKopecks != 487655 {
 		t.Fatalf("calculation response: %s", response.Body.String())
 	}
+	// --------- новый код chat: 13% берутся от 35000, а не от начисленных 5000
+	if err := db.Model(&employee).Updates(map[string]any{"officially_employed": true, "monthly_salary_kopecks": 3500000}).Error; err != nil {
+		t.Fatal(err)
+	}
+	response = call(CalculateSalaryAccrualHandler, "POST", aID, mID)
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != 200 || len(body.Accruals) != 1 || !body.Accruals[0].OfficiallyEmployed || body.Accruals[0].MonthlySalaryKopecks != 3500000 || body.Accruals[0].DeductionKopecks != 455000 || body.TotalDeductionKopecks != 455000 || body.TotalPayableKopecks != 32655 || body.Accruals[0].PayableKopecks != 32655 {
+		t.Fatalf("deduction response: %s", response.Body.String())
+	}
+	// --------- конец нового кода chat
+	// --------- новый код chat: личный расход увеличивает итог, возмещённый исключается
+	if err := db.AutoMigrate(&models.Expenses{}, &models.SalaryBonus{}, &models.SalaryDebt{}, &models.SalaryApproval{}); err != nil {
+		t.Fatal(err)
+	}
+	expense := models.Expenses{AgreementId: agreement.ID, EmployeeCardId: employee.ID, Account: "employee", Price: 100.25}
+	if err := db.Create(&expense).Error; err != nil {
+		t.Fatal(err)
+	}
+	response = call(CalculateSalaryAccrualHandler, "POST", aID, mID)
+	var expenseBody struct {
+		TotalExpensesKopecks int64 `json:"total_expenses_kopecks"`
+		TotalPayableKopecks  int64 `json:"total_payable_kopecks"`
+		Accruals             []struct {
+			ExpensesKopecks int64 `json:"expenses_kopecks"`
+			PayableKopecks  int64 `json:"payable_kopecks"`
+		} `json:"accruals"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &expenseBody); err != nil {
+		t.Fatal(err)
+	}
+	if response.Code != 200 || expenseBody.TotalExpensesKopecks != 10025 || expenseBody.TotalPayableKopecks != 42680 || len(expenseBody.Accruals) != 1 || expenseBody.Accruals[0].ExpensesKopecks != 10025 || expenseBody.Accruals[0].PayableKopecks != 42680 {
+		t.Fatalf("expenses: %s", response.Body.String())
+	}
+	// --------- конец нового кода chat
+	// --------- новый код chat: премия прибавляется только пока не выплачена
+	bonus := models.SalaryBonus{AgreementID: agreement.ID, EmployeeCardID: employee.ID, Month: month.Month, Year: month.Year, AmountKopecks: 10000}
+	if err := db.Create(&bonus).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, paid := range []bool{false, true} {
+		if err := db.Model(&bonus).Update("is_paid", paid).Error; err != nil {
+			t.Fatal(err)
+		}
+		res := call(CalculateSalaryAccrualHandler, "POST", aID, mID)
+		var result struct {
+			TotalBonusesKopecks int64 `json:"total_bonuses_kopecks"`
+			TotalPayableKopecks int64 `json:"total_payable_kopecks"`
+			Accruals            []struct {
+				BonusesKopecks int64 `json:"bonuses_kopecks"`
+			} `json:"accruals"`
+		}
+		if err := json.Unmarshal(res.Body.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		want := int64(10000)
+		if paid {
+			want = 0
+		}
+		if res.Code != 200 || result.TotalBonusesKopecks != want || result.TotalPayableKopecks != 42680+want || len(result.Accruals) != 1 || result.Accruals[0].BonusesKopecks != want {
+			t.Fatalf("bonus totals: %s", res.Body.String())
+		}
+	}
+	// --------- конец нового кода chat
 	deleted := call(DeleteTimeSheetMonthHandler, "DELETE", mID, "")
 	if deleted.Code != 200 {
 		t.Fatalf("delete: %s", deleted.Body.String())

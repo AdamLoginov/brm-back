@@ -2,10 +2,15 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"       // новый код chat
+	"gorm.io/gorm" // новый код chat
+	"io"           // новый код chat
 	"log"
 	"net/http"
 	"project/internal/database"
 	"project/internal/models"
+	"project/internal/service" // новый код chat
+	"strconv"                  // новый код chat
 )
 
 func GetAgreementExpensesHandler(w http.ResponseWriter, r *http.Request) {
@@ -44,6 +49,35 @@ func CreateExpensesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// --------- новый код chat: договор из маршрута и проверка личных расходов
+	agreementID, err := strconv.ParseUint(r.PathValue("id"), 10, 32)
+	if err != nil || agreementID == 0 {
+		http.Error(w, "Некорректный договор", 400)
+		return
+	}
+	var agreement models.Agreement
+	if err := database.DB.First(&agreement, agreementID).Error; err != nil {
+		http.Error(w, "Договор не найден", 404)
+		return
+	}
+	expenses.AgreementId = uint(agreementID)
+	if _, err := service.ExpenseKopecks(expenses.Price); err != nil {
+		http.Error(w, "Некорректная сумма расхода", 400)
+		return
+	}
+	if expenses.Account == "employee" {
+		var employee models.EmployeeCard
+		if expenses.EmployeeCardId == 0 {
+			http.Error(w, "Укажите сотрудника для личного расхода", 400)
+			return
+		}
+		if err := database.DB.First(&employee, expenses.EmployeeCardId).Error; err != nil {
+			http.Error(w, "Сотрудник не найден", 400)
+			return
+		}
+	}
+	expenses.IsReimbursed = false
+	// --------- конец нового кода chat
 	if err := database.DB.Create(&expenses).Error; err != nil {
 		log.Println("[ERROR] Ошибка при сохранении данных данных при создании затрат")
 		http.Error(w, "Ошибка при создании расхода", http.StatusBadRequest)
@@ -53,3 +87,44 @@ func CreateExpensesHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(models.Response{Message: "элемент трат успешно создан!"})
 }
+
+// --------- новый код chat: ручное переключение возмещения только личного расхода
+func UpdateExpenseReimbursementHandler(w http.ResponseWriter, r *http.Request) {
+	agreementID, err := strconv.ParseUint(r.PathValue("id"), 10, 32)
+	expenseID, expenseErr := strconv.ParseUint(r.PathValue("expenseId"), 10, 32)
+	if err != nil || expenseErr != nil || agreementID == 0 || expenseID == 0 {
+		http.Error(w, "Некорректный идентификатор", 400)
+		return
+	}
+	var input struct {
+		IsReimbursed *bool `json:"is_reimbursed"`
+	}
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024))
+	decoder.DisallowUnknownFields()
+	if decoder.Decode(&input) != nil || input.IsReimbursed == nil || decoder.Decode(&struct{}{}) != io.EOF {
+		http.Error(w, "Укажите статус возмещения", 400)
+		return
+	}
+	var expense models.Expenses
+	err = database.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("id = ? AND agreement_id = ? AND account = ?", expenseID, agreementID, "employee").First(&expense).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&expense).Update("is_reimbursed", *input.IsReimbursed).Error; err != nil {
+			return err
+		}
+		return tx.Preload("EmployeeCard").First(&expense, expense.ID).Error
+	})
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "Личный расход не найден в договоре", 404)
+		} else {
+			http.Error(w, "Не удалось изменить статус", 500)
+		}
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(expense)
+}
+
+// --------- конец нового кода chat

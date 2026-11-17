@@ -2,13 +2,9 @@
 package handlers
 
 import (
-	"encoding/json"
-	"errors"
-	"gorm.io/gorm"
-	"log"
 	"net/http"
 	"project/internal/database"
-	"project/internal/models"
+
 	"project/internal/service"
 	"strconv"
 )
@@ -28,51 +24,9 @@ func salaryAccrualResponse(w http.ResponseWriter, r *http.Request, calculate boo
 		http.Error(w, "Некорректный ID договора или табеля", http.StatusBadRequest)
 		return
 	}
-	var rows []models.SalaryAccrual
-	var err error
-	if calculate {
-		rows, err = service.CalculateSalaryAccruals(database.DB, uint(agreementID), uint(monthID))
-	} else {
-		rows, err = service.GetSalaryAccruals(database.DB, uint(agreementID), uint(monthID))
-	}
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		http.Error(w, "Договор или табель не найден", http.StatusNotFound)
-		return
-	}
-	if errors.Is(err, service.ErrSalaryAmountOverflow) {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if err != nil {
-		log.Println("[SalaryAccrual]", err)
-		http.Error(w, "Не удалось обработать начисления", http.StatusInternalServerError)
-		return
-	}
-	// --------- новый код chat: вычет всех неучтённых авансов без изменения начислений
-	summary, err := service.AddSalaryAdvances(database.DB, uint(agreementID), rows)
-	if err != nil {
-		if errors.Is(err, service.ErrSalaryAmountOverflow) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		} else {
-			log.Println("[SalaryAccrual advances]", err)
-			http.Error(w, "Не удалось получить авансы", http.StatusInternalServerError)
-		}
-		return
-	}
-	// --------- новый код chat: штрафы за месяц и год табеля
-	penaltySummary, err := service.AddSalaryPenalties(database.DB, uint(agreementID), uint(monthID), summary)
-	if err != nil {
-		if errors.Is(err, service.ErrSalaryAmountOverflow) {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-		} else {
-			log.Println("[SalaryAccrual penalties]", err)
-			http.Error(w, "Не удалось получить штрафы", http.StatusInternalServerError)
-		}
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(penaltySummary)
-	// --------- конец нового кода chat
+	// --------- новый код chat: единый расчёт с долгами или сохранённый снимок
+	result, err := service.GetSalaryCalculation(database.DB, uint(agreementID), uint(monthID), calculate)
+	salaryApprovalResponse(w, result, err)
 	// --------- конец нового кода chat
 }
 
