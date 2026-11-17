@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"project/internal/database"
 	"project/internal/models"
+	"project/internal/service" // новый код chat
 	"strconv"
 	"time"
 )
@@ -119,13 +120,8 @@ func GetEmployeeCardDocumentDetailHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if document.MimeType != "" {
-		w.Header().Set("Content-Type", document.MimeType)
-	} else {
-		w.Header().Set("Content-Type", "application/octet-stream")
-	}
+	service.SetFileResponseHeaders(w, document.FileName, document.MimeType, false) // новый код chat: просмотр безопасных типов и скачивание остальных
 
-	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", document.FileName))
 	http.ServeFile(w, r, document.FilePath)
 }
 

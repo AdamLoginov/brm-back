@@ -1,11 +1,11 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"os"
 	"project/internal/database"
 	"project/internal/models"
+	"project/internal/service" // новый код chat
 )
 
 func DownloadAttachmenthandler(w http.ResponseWriter, r *http.Request) {
@@ -22,12 +22,7 @@ func DownloadAttachmenthandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if attachment.MimeType != "" {
-		w.Header().Set("Content-Type", attachment.MimeType)
-	} else {
-		w.Header().Set("Content-Type", "application/octet-stream")
-	}
+	service.SetFileResponseHeaders(w, attachment.FileName, attachment.MimeType, true) // новый код chat: просмотр безопасных типов и скачивание остальных
 
-	w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=\"%s\"", attachment.FileName))
 	http.ServeFile(w, r, attachment.FilePath)
 }
