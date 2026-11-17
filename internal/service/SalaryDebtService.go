@@ -99,6 +99,14 @@ func DeleteSalaryDebt(db *gorm.DB, agreementID, debtID uint) error {
 }
 
 type SalaryAccrualWithDebts struct {
+	// --------- новый код chat: состояние сотрудника
+	Approved     bool   `json:"approved"`
+	ApprovalID   uint   `json:"approval_id"`
+	ApprovalDate string `json:"approval_date"`
+	Revision     string `json:"revision"`
+	HasDraft     bool   `json:"has_draft"`
+	DraftReset   bool   `json:"draft_reset"`
+	// --------- конец нового кода chat
 	SalaryAccrualWithBonuses
 	CompanyDebtKopecks     int64                `json:"company_debt_kopecks"`
 	EmployeeDebtKopecks    int64                `json:"employee_debt_kopecks"`

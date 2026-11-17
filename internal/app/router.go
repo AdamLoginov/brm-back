@@ -112,6 +112,9 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/agreements/{id}/debts/{debtId}/update", middleware.AuthMiddleware(handlers.SalaryDebtHandler))
 	mux.HandleFunc("DELETE /api/agreements/{id}/debts/{debtId}", middleware.AuthMiddleware(handlers.SalaryDebtHandler))
 	mux.HandleFunc("PATCH /api/agreements/{id}/debts/{debtId}/status", middleware.AuthMiddleware(handlers.SalaryDebtHandler))
+	// --------- новый код chat: индивидуальные выплаты и согласования
+	mux.HandleFunc("POST /api/agreements/{id}/timesheetmonth/{monthId}/payment-draft", middleware.AuthMiddleware(handlers.SalaryPaymentDraftHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/timesheetmonth/{monthId}/employee-approvals", middleware.AuthMiddleware(handlers.SalaryEmployeeApprovalHandler))
 	mux.HandleFunc("POST /api/agreements/{id}/timesheetmonth/{monthId}/approval", middleware.AuthMiddleware(handlers.SalaryApprovalHandler))
 	mux.HandleFunc("DELETE /api/agreements/{id}/timesheetmonth/{monthId}/approval", middleware.AuthMiddleware(handlers.SalaryApprovalHandler))
 	// --------- конец нового кода chat

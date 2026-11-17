@@ -13,7 +13,7 @@ import (
 func approvalFixture(t *testing.T) (*gorm.DB, models.Agreement, models.TimeSheetMonth, models.EmployeeCard) {
 	t.Helper()
 	db := salaryTestDB(t)
-	if err := db.AutoMigrate(&models.SalaryAdvance{}, &models.SalaryPenalty{}, &models.Expenses{}, &models.SalaryBonus{}, &models.SalaryDebt{}, &models.SalaryApproval{}); err != nil {
+	if err := db.AutoMigrate(&models.SalaryAdvance{}, &models.SalaryPenalty{}, &models.Expenses{}, &models.SalaryBonus{}, &models.SalaryDebt{}, &models.SalaryApproval{}, &models.SalaryPaymentDraft{}, &models.SalaryApprovalBatch{}); err != nil {
 		t.Fatal(err)
 	}
 	a, m, e := salaryFixture(t, db)

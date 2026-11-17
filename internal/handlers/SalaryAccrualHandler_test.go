@@ -24,7 +24,7 @@ func TestSalaryAccrualAPIAndMonthDeletion(t *testing.T) {
 	previousDB := database.DB
 	database.DB = db
 	t.Cleanup(func() { database.DB = previousDB; sqlDB, _ := db.DB(); sqlDB.Close() })
-	if err := db.AutoMigrate(&models.Agreement{}, &models.EmployeeCard{}, &models.TimeSheetMonth{}, &models.TimeSheet{}, &models.SalaryAccrual{}, &models.SalaryAdvance{}, &models.SalaryPenalty{}, &models.DailyAllowanceAccrual{}, &models.Expenses{}, &models.SalaryBonus{}, &models.SalaryDebt{}, &models.SalaryApproval{}); err != nil { // новый код chat: авансы в тестовой БД
+	if err := db.AutoMigrate(&models.Agreement{}, &models.EmployeeCard{}, &models.TimeSheetMonth{}, &models.TimeSheet{}, &models.SalaryAccrual{}, &models.SalaryAdvance{}, &models.SalaryPenalty{}, &models.DailyAllowanceAccrual{}, &models.Expenses{}, &models.SalaryBonus{}, &models.SalaryDebt{}, &models.SalaryApproval{}, &models.SalaryPaymentDraft{}, &models.SalaryApprovalBatch{}); err != nil { // новый код chat: авансы в тестовой БД
 		t.Fatal(err)
 	}
 	agreement := models.Agreement{Name: "Договор", Number: "1"}
@@ -107,7 +107,7 @@ func TestSalaryAccrualAPIAndMonthDeletion(t *testing.T) {
 	}
 	// --------- конец нового кода chat
 	// --------- новый код chat: личный расход увеличивает итог, возмещённый исключается
-	if err := db.AutoMigrate(&models.Expenses{}, &models.SalaryBonus{}, &models.SalaryDebt{}, &models.SalaryApproval{}); err != nil {
+	if err := db.AutoMigrate(&models.Expenses{}, &models.SalaryBonus{}, &models.SalaryDebt{}, &models.SalaryApproval{}, &models.SalaryPaymentDraft{}, &models.SalaryApprovalBatch{}); err != nil {
 		t.Fatal(err)
 	}
 	expense := models.Expenses{AgreementId: agreement.ID, EmployeeCardId: employee.ID, Account: "employee", Price: 100.25}

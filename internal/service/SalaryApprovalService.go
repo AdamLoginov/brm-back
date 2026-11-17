@@ -69,15 +69,9 @@ func GetSalaryCalculation(db *gorm.DB, agreementID, monthID uint, calculate bool
 		if err := findSalaryTimeSheet(tx, agreementID, monthID, &month); err != nil {
 			return err
 		}
-		stored, err := loadSalaryApproval(tx, agreementID, monthID)
-		if err != nil {
-			return err
-		}
-		if stored != nil {
-			result = *stored
-			return nil
-		}
-		result, err = calculateSalaryApproval(tx, agreementID, monthID, calculate)
+		// --------- новый код chat: индивидуальные выплаты и согласования
+		var err error
+		result, err = employeeSalaryCalculation(tx, agreementID, monthID, calculate)
 		return err
 	})
 	return result, err
@@ -199,6 +193,11 @@ func fillSalaryDetails(db *gorm.DB, agreementID, monthID uint, result *SalaryDeb
 func ApproveSalary(db *gorm.DB, agreementID, monthID uint, input SalaryApprovalInput) (SalaryDebtSummary, error) {
 	salaryApprovalMutex.Lock()
 	defer salaryApprovalMutex.Unlock()
+	return approveSalaryEmployee(db, agreementID, monthID, input, 0)
+}
+
+// --------- новый код chat: индивидуальные выплаты и согласования
+func approveSalaryEmployee(db *gorm.DB, agreementID, monthID uint, input SalaryApprovalInput, employeeID uint) (SalaryDebtSummary, error) {
 	var result SalaryDebtSummary
 	date, err := time.Parse("2006-01-02", input.Date)
 	if err != nil || date.Year() < 1 || len(input.RequestKey) < 8 || len(input.RequestKey) > 100 || input.Revision == "" {
@@ -212,7 +211,7 @@ func ApproveSalary(db *gorm.DB, agreementID, monthID uint, input SalaryApprovalI
 		var previous models.SalaryApproval
 		lookup := tx.Where("request_key = ?", input.RequestKey).First(&previous).Error
 		if lookup == nil {
-			if previous.RequestHash != hash || previous.ActiveMonthID == nil {
+			if previous.RequestHash != hash || (previous.ActiveMonthID == nil && previous.ActiveEmployeeKey == nil) {
 				return ErrSalaryApprovalConflict
 			}
 			return json.Unmarshal([]byte(previous.Snapshot), &result)
@@ -227,9 +226,36 @@ func ApproveSalary(db *gorm.DB, agreementID, monthID uint, input SalaryApprovalI
 		if stored != nil {
 			return ErrSalaryApprovalConflict
 		}
+		// новый код chat: старое общее API не должно повторно закрывать индивидуальные согласования
+		var activeCount int64
+		activeQuery := tx.Model(&models.SalaryApproval{}).Where("agreement_id = ? AND time_sheet_month_id = ? AND active_employee_key IS NOT NULL", agreementID, monthID)
+		if employeeID != 0 {
+			activeQuery = activeQuery.Where("employee_card_id = ?", employeeID)
+		}
+		if err := activeQuery.Count(&activeCount).Error; err != nil {
+			return err
+		}
+		if activeCount > 0 {
+			return ErrSalaryApprovalConflict
+		}
 		result, err = calculateSalaryApproval(tx, agreementID, monthID, true)
 		if err != nil {
 			return err
+		}
+		// --------- новый код chat: индивидуальные выплаты и согласования
+		if employeeID != 0 {
+			filtered := []SalaryAccrualWithDebts{}
+			for _, row := range result.Accruals {
+				if row.EmployeeCardID == employeeID {
+					row.Revision = salaryRowRevision(row)
+					filtered = append(filtered, row)
+				}
+			}
+			result.Accruals = filtered
+			if len(filtered) != 1 {
+				return ErrSalaryApprovalConflict
+			}
+			result.Revision = filtered[0].Revision
 		}
 		if result.Revision != input.Revision {
 			return ErrSalaryApprovalConflict
@@ -253,6 +279,13 @@ func ApproveSalary(db *gorm.DB, agreementID, monthID uint, input SalaryApprovalI
 			payments[v.EmployeeCardID] = amount
 		}
 		approval := models.SalaryApproval{AgreementID: agreementID, TimeSheetMonthID: monthID, ActiveMonthID: &monthID, Date: input.Date, RequestKey: input.RequestKey, RequestHash: hash}
+		// --------- новый код chat: индивидуальные выплаты и согласования
+		if employeeID != 0 {
+			key := fmt.Sprintf("%d/%d/%d", agreementID, monthID, employeeID)
+			approval.ActiveMonthID = nil
+			approval.EmployeeCardID = employeeID
+			approval.ActiveEmployeeKey = &key
+		}
 		if err := tx.Create(&approval).Error; err != nil {
 			return err
 		}
@@ -285,6 +318,9 @@ func ApproveSalary(db *gorm.DB, agreementID, monthID uint, input SalaryApprovalI
 			}
 			result.TotalPaymentKopecks += amount
 			row.PaymentKopecks = amount
+			// --------- новый код chat: индивидуальные выплаты и согласования
+			row.Approved, row.ApprovalID, row.ApprovalDate = true, approval.ID, input.Date
+			row.Revision = salaryRowRevision(*row) // новый код chat: стабильная версия снимка
 			for _, v := range row.Detail.Advances {
 				if err := change("salary_advances", v.ID, "is_settled", false, true, nil); err != nil {
 					return err
@@ -360,12 +396,17 @@ func ApproveSalary(db *gorm.DB, agreementID, monthID uint, input SalaryApprovalI
 func CancelSalaryApproval(db *gorm.DB, agreementID, monthID, approvalID uint) error {
 	salaryApprovalMutex.Lock()
 	defer salaryApprovalMutex.Unlock()
+	return cancelSalaryEmployee(db, agreementID, monthID, approvalID)
+}
+
+// --------- новый код chat: индивидуальные выплаты и согласования
+func cancelSalaryEmployee(db *gorm.DB, agreementID, monthID, approvalID uint) error {
 	return db.Transaction(func(tx *gorm.DB) error {
 		var approval models.SalaryApproval
 		if err := tx.Where("agreement_id = ? AND time_sheet_month_id = ?", agreementID, monthID).First(&approval, approvalID).Error; err != nil {
 			return err
 		}
-		if approval.ActiveMonthID == nil {
+		if approval.ActiveMonthID == nil && approval.ActiveEmployeeKey == nil {
 			return nil
 		}
 		var changes []salaryApprovalChange
@@ -400,7 +441,7 @@ func CancelSalaryApproval(db *gorm.DB, agreementID, monthID, approvalID uint) er
 				}
 			}
 		}
-		return tx.Model(&approval).Update("active_month_id", nil).Error
+		return tx.Model(&approval).Updates(map[string]any{"active_month_id": nil, "active_employee_key": nil}).Error // --------- новый код chat: индивидуальные выплаты и согласования
 	})
 }
 

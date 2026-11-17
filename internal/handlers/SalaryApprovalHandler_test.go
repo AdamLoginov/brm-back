@@ -26,7 +26,7 @@ func TestSalaryApprovalAPI(t *testing.T) {
 	old := database.DB
 	database.DB = db
 	t.Cleanup(func() { database.DB = old; sqlDB, _ := db.DB(); sqlDB.Close() })
-	if err := db.AutoMigrate(&models.Agreement{}, &models.EmployeeCard{}, &models.TimeSheetMonth{}, &models.TimeSheet{}, &models.SalaryAccrual{}, &models.SalaryAdvance{}, &models.SalaryPenalty{}, &models.SalaryBonus{}, &models.Expenses{}, &models.SalaryDebt{}, &models.SalaryApproval{}); err != nil {
+	if err := db.AutoMigrate(&models.Agreement{}, &models.EmployeeCard{}, &models.TimeSheetMonth{}, &models.TimeSheet{}, &models.SalaryAccrual{}, &models.SalaryAdvance{}, &models.SalaryPenalty{}, &models.SalaryBonus{}, &models.Expenses{}, &models.SalaryDebt{}, &models.SalaryApproval{}, &models.SalaryPaymentDraft{}, &models.SalaryApprovalBatch{}); err != nil {
 		t.Fatal(err)
 	}
 	a := models.Agreement{Name: "Тест"}

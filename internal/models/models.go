@@ -306,7 +306,32 @@ type SalaryDebt struct {
 	SourceApprovalID *uint  `gorm:"index" json:"source_approval_id"`
 }
 
+// --------- новый код chat: индивидуальные выплаты и согласования
+type SalaryPaymentDraft struct {
+	gorm.Model
+	AgreementID      uint `gorm:"uniqueIndex:idx_salary_draft;not null"`
+	TimeSheetMonthID uint `gorm:"uniqueIndex:idx_salary_draft;not null"`
+	EmployeeCardID   uint `gorm:"uniqueIndex:idx_salary_draft;not null"`
+	AmountKopecks    int64
+	Revision         string
+}
+
+// --------- новый код chat: повтор массового запроса не повторяет финансовые операции
+type SalaryApprovalBatch struct {
+	gorm.Model
+	RequestKey  string `gorm:"uniqueIndex;not null"`
+	RequestHash string
+	Snapshot    string `gorm:"type:text"`
+}
+
+// --------- конец нового кода chat
+
+// --------- новый код chat: индивидуальные выплаты и согласования
 type SalaryApproval struct {
+	// --------- новый код chat: индивидуальные выплаты и согласования
+	EmployeeCardID    uint    `gorm:"index"`
+	ActiveEmployeeKey *string `gorm:"uniqueIndex"`
+	// --------- новый код chat: индивидуальные выплаты и согласования
 	gorm.Model
 	AgreementID      uint   `gorm:"index;not null" json:"agreement_id"`
 	TimeSheetMonthID uint   `gorm:"index;not null" json:"time_sheet_month_id"`
