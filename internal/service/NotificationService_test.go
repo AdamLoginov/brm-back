@@ -361,3 +361,48 @@ func TestSharedTaskChangesAndInvalidRecipient(t *testing.T) {
 }
 
 // --------- конец нового кода chat
+
+// --------- новый код chat: срок создаётся, изменяется, очищается и сохраняется при завершении
+func TestTaskDueDate(t *testing.T) {
+	db, u := notificationFixture(t)
+	for _, date := range []string{"2026-02-30", "18.11.2026", "2026-1-01", "0000-01-01", "2026-11-18T12:00:00Z"} {
+		if _, err := CreateTaskWithNotifications(db, u[0].ID, models.Task{DueDate: date}); !errors.Is(err, ErrTaskDueDate) {
+			t.Fatal(date, err)
+		}
+	}
+	task, err := CreateTaskWithNotifications(db, u[0].ID, models.Task{DueDate: "2028-02-29", ToUserID: u[1].ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.DueDate = "2026-12-31"
+	task, err = UpdateTaskWithNotifications(db, u[0].ID, task, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := models.Task{}
+	input.ID = task.ID
+	task, err = UpdateTaskWithNotifications(db, u[1].ID, input, true)
+	if err != nil || task.DueDate != "2026-12-31" {
+		t.Fatal("completion changed due date", err)
+	}
+	task.DueDate = "invalid"
+	if _, err = UpdateTaskWithNotifications(db, u[0].ID, task, false); !errors.Is(err, ErrTaskDueDate) {
+		t.Fatal(err)
+	}
+	var stored models.Task
+	db.First(&stored, task.ID)
+	if stored.DueDate != "2026-12-31" {
+		t.Fatal("invalid date persisted")
+	}
+	task.DueDate = ""
+	if _, err = UpdateTaskWithNotifications(db, u[0].ID, task, false); err != nil {
+		t.Fatal(err)
+	}
+	stored = models.Task{}
+	db.First(&stored, task.ID)
+	if stored.DueDate != "" {
+		t.Fatal("due date not cleared")
+	}
+}
+
+// --------- конец нового кода chat

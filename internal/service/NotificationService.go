@@ -91,10 +91,29 @@ func saveTaskUsers(tx *gorm.DB, task *models.Task, users []models.User) error {
 	}
 	return tx.Model(task).Update("to_user_id", task.ToUserID).Error
 }
+
+// --------- новый код chat: календарная дата без преобразований часового пояса
+var ErrTaskDueDate = errors.New("Укажите корректный срок выполнения в формате ГГГГ-ММ-ДД")
+
+func validateTaskDueDate(value string) error {
+	if value == "" {
+		return nil
+	}
+	date, err := time.Parse("2006-01-02", value)
+	if err != nil || date.Year() < 1 || date.Format("2006-01-02") != value {
+		return ErrTaskDueDate
+	}
+	return nil
+}
+
+// --------- конец нового кода chat
 func CreateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task) (models.Task, error) {
 	taskNotificationMutex.Lock()
 	defer taskNotificationMutex.Unlock()
-	task := models.Task{Message: input.Message, FromUserID: actorID, Priority: input.Priority}
+	if err := validateTaskDueDate(input.DueDate); err != nil {
+		return models.Task{}, err
+	} // новый код chat
+	task := models.Task{Message: input.Message, FromUserID: actorID, Priority: input.Priority, DueDate: input.DueDate}
 	err := db.Transaction(func(tx *gorm.DB) error {
 		actor, err := notificationActor(tx, actorID)
 		if err != nil {
@@ -146,6 +165,10 @@ func UpdateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task, c
 		}
 		task.Status = nextStatus
 		if !completeOnly {
+			if err := validateTaskDueDate(input.DueDate); err != nil {
+				return err
+			} // новый код chat
+			task.DueDate = input.DueDate // новый код chat: пустая строка снимает срок
 			task.Message = input.Message
 			task.Priority = input.Priority
 			// Старый клиент может менять одиночное назначение; новые клиенты передают явный массив.
@@ -168,7 +191,7 @@ func UpdateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task, c
 			task.CompletedAt = nil
 			task.CompletedByID = nil
 		}
-		if err = tx.Model(&task).Select("Message", "Status", "Priority", "CompletedAt", "CompletedByID").Updates(&task).Error; err != nil {
+		if err = tx.Model(&task).Select("Message", "Status", "Priority", "CompletedAt", "CompletedByID", "DueDate").Updates(&task).Error; err != nil {
 			return err
 		}
 		recipients := taskUsers(task)

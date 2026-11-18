@@ -427,6 +427,7 @@ type Tool struct {
 }
 
 type Task struct {
+	DueDate string `gorm:"default:''" json:"due_date"` // новый код chat: дата включительно, без времени; пусто — без срока
 	gorm.Model
 	// --------- новый код chat: участники общей задачи и фактический исполнитель
 	Assignees     []User `gorm:"many2many:task_assignees;" json:"assignees"`

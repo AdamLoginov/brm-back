@@ -27,6 +27,8 @@ func notificationResponse(w http.ResponseWriter, result any, err error) {
 			http.Error(w, "Запись не найдена", 404)
 		case errors.Is(err, service.ErrTaskForbidden): // новый код chat: права на выполнение
 			http.Error(w, err.Error(), 403)
+		case errors.Is(err, service.ErrTaskDueDate): // новый код chat
+			http.Error(w, err.Error(), 400)
 		case errors.Is(err, service.ErrTaskUser):
 			http.Error(w, err.Error(), 400)
 		default:
