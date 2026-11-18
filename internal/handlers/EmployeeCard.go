@@ -45,7 +45,12 @@ func GetAllEmployeeCardAgreementHandler(w http.ResponseWriter, r *http.Request) 
 
 func GetAllEmployeeCardHandler(w http.ResponseWriter, r *http.Request) {
 	var employeeCard []models.EmployeeCard
-	if err := database.DB.Preload("Specializations").Preload("Agreement").Find(&employeeCard).Error; err != nil {
+	// новый код chat: документы для проверки заполненности загружаются только по запросу
+	query := database.DB.Preload("Specializations").Preload("Agreement")
+	if r.URL.Query().Get("include_documents") == "true" {
+		query = query.Preload("EmployeeDocuments.CategoryEmployeeDocument")
+	}
+	if err := query.Find(&employeeCard).Error; err != nil {
 		msg := "[Error] Ошибка получения карточек сотрудников"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusInternalServerError)
