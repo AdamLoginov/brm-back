@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"project/internal/database"
 	"project/internal/models"
+	"project/internal/service"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,7 +19,12 @@ var employeeProfileMutex sync.Mutex
 func saveEmployeeProfile(employee *models.EmployeeCard, id string) error {
 	employeeProfileMutex.Lock()
 	defer employeeProfileMutex.Unlock()
-	return database.DB.Transaction(func(tx *gorm.DB) error {
+	// --------- новый код chat: согласованное изменение ФИО и путей документов
+	service.FileStorageMutex.Lock()
+	defer service.FileStorageMutex.Unlock()
+	batch := &service.FileStorageBatch{}
+	defer batch.Close()
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
 		// --------- новый код chat: уволенный сотрудник не закреплён за договором
 		if employee.Status {
 			employee.AgreementID = 0
@@ -77,10 +83,17 @@ func saveEmployeeProfile(employee *models.EmployeeCard, id string) error {
 			}
 		}
 		if employee.SpecializationIDs != nil {
-			return tx.Model(employee).Association("Specializations").Replace(selected)
+			if err := tx.Model(employee).Association("Specializations").Replace(selected); err != nil {
+				return err
+			}
 		}
-		return nil
+		return service.SyncEmployeeStorage(tx, batch, *employee)
 	})
+	if err == nil {
+		batch.Commit()
+	}
+	return err
+	// --------- конец нового кода chat
 }
 
 func ListEmployeeSpecializations(w http.ResponseWriter, r *http.Request) {

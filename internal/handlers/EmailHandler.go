@@ -2,17 +2,15 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
-	"io"
+	"errors"
 	"log"
 	"net/http"
-	"os"
-	"path/filepath"
 	"project/internal/database"
 	"project/internal/mailer"
+	"project/internal/middleware"
 	"project/internal/models"
+	"project/internal/service"
 	"strconv"
-	"time"
 )
 
 func GetAllEmailsHandler(w http.ResponseWriter, r *http.Request) {
@@ -40,11 +38,18 @@ func GetDetailEmailHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func CreateEmailHandler(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
+	// новый код chat: ограничение размера и очистка временных частей
+	r.Body = http.MaxBytesReader(w, r.Body, service.MaxStoredFileSize+(1<<20))
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
 		http.Error(w, "Ошибка при парсинге формы", http.StatusBadRequest)
 		return
 	}
 
+	defer r.MultipartForm.RemoveAll()
+	service.FileStorageMutex.Lock()
+	defer service.FileStorageMutex.Unlock()
+	batch := &service.FileStorageBatch{}
+	defer batch.Close()
 	tx := database.DB.Begin()
 	defer tx.Rollback()
 
@@ -63,39 +68,22 @@ func CreateEmailHandler(w http.ResponseWriter, r *http.Request) {
 		DialogID:  uint(dialogId),
 	}
 
-	file, handler, err := r.FormFile("file")
+	// --------- новый код chat: вложение исходящего письма
+	file, header, err := r.FormFile("file")
 	if err == nil {
-		uniqueFileName := fmt.Sprintf("%d_%s", time.Now().Unix(), handler.Filename)
-		filePath := filepath.Join("./uploads", uniqueFileName)
-		dst, err := os.Create(filePath)
-		if err != nil {
-			log.Printf("[UPLOAD ERROR] Не удалось создать файл на диске: %v", err)
-			http.Error(w, "Ошибка сохранения файла", http.StatusInternalServerError)
+		defer file.Close()
+		attachment, saveErr := service.SaveMailAttachment(tx, batch, header.Filename, file, "outgoing", middleware.CurrentUserID(r))
+		if saveErr != nil {
+			log.Printf("[UPLOAD ERROR] %v", saveErr)
+			http.Error(w, "Не удалось сохранить вложение", 400)
 			return
 		}
-		defer dst.Close()
-
-		if _, err := io.Copy(dst, file); err != nil {
-			http.Error(w, "Ошибка при записи файла", http.StatusInternalServerError)
-			return
-		}
-
-		_, _ = file.Seek(0, 0)
-		buffer := make([]byte, 512)
-		_, _ = file.Read(buffer)
-
-		// Go сам проанализирует байты и вернет точный MIME-тип (например "application/pdf")
-		mimeType := http.DetectContentType(buffer)
-
-		attachment := models.Attachment{
-			FileName: handler.Filename,
-			FilePath: filePath,
-			FileSize: handler.Size,
-			MimeType: mimeType,
-		}
-
 		email.Attachments = append(email.Attachments, attachment)
+	} else if !errors.Is(err, http.ErrMissingFile) {
+		http.Error(w, "Некорректное вложение", 400)
+		return
 	}
+	// --------- конец нового кода chat
 
 	if err := tx.Create(&email).Error; err != nil {
 		http.Error(w, "Ошибка при сохранении данных в БД", http.StatusInternalServerError)
@@ -106,6 +94,8 @@ func CreateEmailHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Ошибка фиксации транзакции", http.StatusInternalServerError)
 		return
 	}
+
+	batch.Commit() // новый код chat
 
 	go func(email models.Email) {
 		if err := mailer.SendOrderEmail(email, false); err != nil {

@@ -63,8 +63,23 @@ type CategoryEmployeeDocument struct {
 	EmployeeDocuments []EmployeeDocuments `gorm:"foreignKey:CategoryEmployeeDocumentID" json:"employee_documents"`
 }
 
+// --------- новый код chat: единый реестр физических файлов
+type StoredFile struct {
+	gorm.Model
+	StorageKey   string `gorm:"uniqueIndex;not null" json:"-"`
+	OriginalName string `json:"original_name"`
+	Size         int64  `json:"size"`
+	MIMEType     string `json:"mime_type"`
+	SHA256       string `gorm:"size:64" json:"sha256"`
+	UploadedBy   uint   `json:"uploaded_by"`
+	Kind         string `gorm:"index" json:"kind"`
+}
+
+// --------- конец нового кода chat
+
 type EmployeeDocuments struct {
 	gorm.Model
+	StoredFileID               *uint                    `gorm:"index" json:"stored_file_id,omitempty"` // новый код chat: старые пути остаются совместимыми
 	DocumentName               string                   `json:"document_name"`
 	DocumentReal               bool                     `json:"document_real"`
 	FileName                   string                   `json:"file_name"`
@@ -254,11 +269,12 @@ type Email struct {
 
 type Attachment struct {
 	gorm.Model
-	FileName string `json:"file_name"`
-	FilePath string `json:"file_path"`
-	FileSize int64  `json:"file_size"`
-	MimeType string `json:"mime_type"`
-	EmailID  uint   `json:"email_id"`
+	StoredFileID *uint  `gorm:"index" json:"stored_file_id,omitempty"` // новый код chat
+	FileName     string `json:"file_name"`
+	FilePath     string `json:"file_path"`
+	FileSize     int64  `json:"file_size"`
+	MimeType     string `json:"mime_type"`
+	EmailID      uint   `json:"email_id"`
 }
 
 // --------- новый код chat: выплаченные авансы, сохраняемые отдельно от начислений

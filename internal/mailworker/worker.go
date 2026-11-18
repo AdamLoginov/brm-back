@@ -5,9 +5,9 @@ import (
 	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"project/internal/database"
 	"project/internal/models"
+	"project/internal/service"
 	"strings"
 	"time"
 
@@ -45,7 +45,7 @@ func StartEmailMonitoring(db *gorm.DB) {
 			seqset := new(imap.SeqSet)
 			seqset.AddNum(ids...)
 
-			var section imap.BodySectionName
+			section := imap.BodySectionName{Peek: true} // новый код chat: отметка прочитано только после сохранения
 			items := []imap.FetchItem{imap.FetchEnvelope, section.FetchItem()}
 
 			messages := make(chan *imap.Message, 10)
@@ -66,21 +66,13 @@ func StartEmailMonitoring(db *gorm.DB) {
 					emailFrom = msg.Envelope.From[0].Address()
 				}
 
-				rawText, attchments := parseEmailContent(msg.GetBody(&section))
-
-				newEmail := models.Email{
-					EmailTo:     emailTo,
-					EmailFrom:   emailFrom,
-					Title:       msg.Envelope.Subject,
-					Message:     strings.TrimSpace(rawText),
-					DialogID:    findDialog(emailFrom),
-					Attachments: attchments,
-				}
-
-				if err := db.Create(&newEmail).Error; err != nil {
+				// --------- новый код chat: письмо и файлы сохраняются вместе
+				newEmail := models.Email{EmailTo: emailTo, EmailFrom: emailFrom, Title: msg.Envelope.Subject, DialogID: findDialog(emailFrom)}
+				if err := saveIncomingEmail(db, msg.GetBody(&section), &newEmail); err != nil {
 					log.Printf("[DB ERROR] Не удалось сохранить письмо: %v", err)
 					continue
 				}
+				// --------- конец нового кода chat
 
 				singleSeq := new(imap.SeqSet)
 				singleSeq.AddNum(msg.SeqNum)
@@ -121,72 +113,71 @@ func findDialog(emailFrom string) uint {
 	return dialog.ID
 }
 
-func parseEmailContent(r io.Reader) (string, []models.Attachment) {
+// --------- новый код chat: единое хранилище вложений входящей почты
+func saveIncomingEmail(db *gorm.DB, reader io.Reader, email *models.Email) error {
+	service.FileStorageMutex.Lock()
+	defer service.FileStorageMutex.Unlock()
+	batch := &service.FileStorageBatch{}
+	defer batch.Close()
+	err := db.Transaction(func(tx *gorm.DB) error {
+		body, attachments, err := parseEmailContent(reader, tx, batch)
+		if err != nil {
+			return err
+		}
+		email.Message = strings.TrimSpace(body)
+		email.Attachments = attachments
+		return tx.Create(email).Error
+	})
+	if err == nil {
+		batch.Commit()
+	}
+	return err
+}
+func parseEmailContent(r io.Reader, tx *gorm.DB, batch *service.FileStorageBatch) (string, []models.Attachment, error) {
 	if r == nil {
-		return "", nil
+		return "", nil, fmt.Errorf("пустое письмо")
 	}
-
-	mailReader, err := mail.CreateReader(r)
+	reader, err := mail.CreateReader(r)
 	if err != nil {
-		log.Printf("[IMAP ERROR] Ошибка создания Mail Reader: %v", err)
-		return "", nil
+		return "", nil, err
 	}
-
-	var bodyText string
+	defer reader.Close()
+	var body string
 	var attachments []models.Attachment
-
 	for {
-		part, err := mailReader.NextPart()
+		part, err := reader.NextPart()
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
-			log.Printf("[IMAP WARNING] Ошибка чтения части письма: %v", err)
-			break
+			return "", nil, err
 		}
-
 		switch header := part.Header.(type) {
-
 		case *mail.InlineHeader:
 			contentType, _, _ := header.ContentType()
-			if contentType == "text/plain" && bodyText == "" {
-				bytesBody, err := io.ReadAll(part.Body)
-				if err == nil {
-					bodyText = string(bytesBody)
+			if contentType == "text/plain" && body == "" {
+				data, err := io.ReadAll(io.LimitReader(part.Body, (4<<20)+1))
+				if err != nil {
+					return "", nil, err
 				}
+				if len(data) > 4<<20 {
+					return "", nil, fmt.Errorf("текст письма превышает 4 МБ")
+				}
+				body = string(data)
 			}
 		case *mail.AttachmentHeader:
 			filename, err := header.Filename()
 			if err != nil || filename == "" {
-				continue // Пропускаем файл, если не удалось прочитать имя
+				return "", nil, fmt.Errorf("не удалось прочитать имя вложения")
 			}
-
-			contentType, _, _ := header.ContentType()
-			uniqueFileName := fmt.Sprintf("%d_%s", time.Now().UnixNano(), filename)
-			filePath := filepath.Join("./uploads", uniqueFileName)
-			dst, err := os.Create(filePath)
+			attachment, err := service.SaveMailAttachment(tx, batch, filename, part.Body, "incoming", 0)
 			if err != nil {
-				log.Printf("[IMAP ERROR] Не удалось создать файл на диске: %v", err)
-				continue
+				return "", nil, err
 			}
-			writtenSize, err := io.Copy(dst, part.Body)
-			dst.Close() // Обязательно закрываем файл сразу после записи!
-			if err != nil {
-				log.Printf("[IMAP ERROR] Ошибка при записи вложения: %v", err)
-				_ = os.Remove(filePath) // Удаляем битый файл
-				continue
-			}
-			attachment := models.Attachment{
-				FileName: filename,
-				FilePath: filePath,
-				FileSize: writtenSize,
-				MimeType: contentType,
-			}
-
 			attachments = append(attachments, attachment)
 		}
-
 	}
-
-	return bodyText, attachments
+	return body, attachments, nil
 }
+
+// --------- конец нового кода chat

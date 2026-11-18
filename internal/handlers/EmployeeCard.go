@@ -2,17 +2,16 @@ package handlers
 
 import (
 	"encoding/json"
-	"fmt"
-	"io"
+	"errors"
+	"gorm.io/gorm"
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"project/internal/database"
+	"project/internal/middleware"
 	"project/internal/models"
 	"project/internal/service" // новый код chat
 	"strconv"
-	"time"
 )
 
 func GetEmployeeCardDetailHandler(w http.ResponseWriter, r *http.Request) {
@@ -120,72 +119,80 @@ func GetEmployeeCardDocumentDetailHandler(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if _, err := os.Stat(document.FilePath); os.IsNotExist(err) {
+	// --------- новый код chat: относительный ключ или старый путь
+	filePath, err := service.FileLocation(database.DB, document.StoredFileID, document.FilePath)
+	if err != nil {
+		http.Error(w, "Не удалось найти файл", 404)
+		return
+	}
+	if _, err := os.Stat(filePath); err != nil {
 		http.Error(w, "Физический файл отсутствует на сервере", http.StatusNotFound)
 		return
 	}
 
 	service.SetFileResponseHeaders(w, document.FileName, document.MimeType, false) // новый код chat: просмотр безопасных типов и скачивание остальных
 
-	http.ServeFile(w, r, document.FilePath)
+	http.ServeFile(w, r, filePath) // новый код chat
 }
 
+// --------- новый код chat: загрузка через общее хранилище
 func CreateEmployeeCardDocumentHandler(w http.ResponseWriter, r *http.Request) {
-	var employeeCardID = r.PathValue("id")
-
-	if err := r.ParseMultipartForm(32 << 25); err != nil {
-		http.Error(w, "Ошибка при парсинге формы", http.StatusBadRequest)
+	r.Body = http.MaxBytesReader(w, r.Body, service.MaxStoredFileSize+(1<<20))
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		http.Error(w, "Некорректная форма или превышен размер файла (64 МБ)", http.StatusBadRequest)
 		return
 	}
-
-	file, handler, err := r.FormFile("file")
-	if err == nil {
-		uniqueFileName := fmt.Sprintf("%s_%d", handler.Filename, time.Now().Unix())
-		filePath := filepath.Join("./uploads/documents", uniqueFileName)
-		dst, err := os.Create(filePath)
-		if err != nil {
-			log.Printf("[UPLOAD ERROR] Не удалось создать файл на диске: %v", err)
-			http.Error(w, "Ошибка сохранения файла", http.StatusInternalServerError)
-			return
-		}
-		defer dst.Close()
-
-		if _, err := io.Copy(dst, file); err != nil {
-			http.Error(w, "Ошибка при записи файла", http.StatusInternalServerError)
-			return
-		}
-
-		_, _ = file.Seek(0, 0)
-		buffer := make([]byte, 512)
-		_, _ = file.Read(buffer)
-
-		// Go сам проанализирует байты и вернет точный MIME-тип (например "application/pdf")
-		mimeType := http.DetectContentType(buffer)
-
-		employeeCardID_uint, err := strconv.ParseUint(employeeCardID, 10, 32)
-		categoryID, _ := strconv.ParseUint(r.FormValue("category_employee_document_id"), 10, 32)
-
-		employeeDocument := models.EmployeeDocuments{
-			// DocumentName:               r.FormValue("document_name"),
-			FileName:                   handler.Filename,
-			FilePath:                   filePath,
-			FileSize:                   handler.Size,
-			MimeType:                   mimeType,
-			EmployeeCardID:             uint(employeeCardID_uint),
-			CategoryEmployeeDocumentID: uint(categoryID),
-		}
-
-		if err := database.DB.Create(&employeeDocument).Error; err != nil {
-			msg := "[Error] Ошибка при сохранении данных документа"
-			log.Println(msg)
-			http.Error(w, msg, http.StatusBadRequest)
-			return
-		}
+	defer r.MultipartForm.RemoveAll()
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "Выберите файл", 400)
+		return
 	}
-
+	defer file.Close()
+	employeeID, err := strconv.ParseUint(r.PathValue("id"), 10, 32)
+	if err != nil || employeeID == 0 {
+		http.Error(w, "Некорректный сотрудник", 400)
+		return
+	}
+	categoryID, err := strconv.ParseUint(r.FormValue("category_employee_document_id"), 10, 32)
+	if err != nil || categoryID == 0 {
+		http.Error(w, "Выберите категорию", 400)
+		return
+	}
+	service.FileStorageMutex.Lock()
+	defer service.FileStorageMutex.Unlock()
+	batch := &service.FileStorageBatch{}
+	defer batch.Close()
+	err = database.DB.Transaction(func(tx *gorm.DB) error {
+		var employee models.EmployeeCard
+		if err := tx.First(&employee, employeeID).Error; err != nil {
+			return err
+		}
+		var category models.CategoryEmployeeDocument
+		if err := tx.First(&category, categoryID).Error; err != nil {
+			return err
+		}
+		_, err := service.SaveEmployeeDocument(tx, batch, employee, category, header.Filename, file, middleware.CurrentUserID(r))
+		return err
+	})
+	if err != nil {
+		log.Printf("[UPLOAD ERROR] %v", err)
+		status := http.StatusInternalServerError
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			status = http.StatusNotFound
+		}
+		if errors.Is(err, service.ErrFileTooLarge) {
+			status = http.StatusRequestEntityTooLarge
+		}
+		http.Error(w, "Не удалось сохранить документ", status)
+		return
+	}
+	batch.Commit()
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(models.Response{Message: "Документ на сотрудника успешно добавлен"})
 }
+
+// --------- конец нового кода chat
 
 func DeleteEmployeeCardDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	var documentId = r.PathValue("id")

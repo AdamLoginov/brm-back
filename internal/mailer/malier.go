@@ -3,10 +3,11 @@ package mailer
 import (
 	"crypto/tls"
 	"fmt"
-	"log"
 	"net/smtp"
 	"os"
+	"project/internal/database"
 	"project/internal/models" // Замени на свой путь
+	"project/internal/service"
 
 	"github.com/jordan-wright/email"
 )
@@ -84,22 +85,32 @@ func buildMessage(msg models.Email, flag bool) ([]byte, error) {
 	}
 
 	if flag {
-		if _, err := e.AttachFile("./uploads/company_card.pdf"); err != nil {
-			log.Fatalf("[Ошибка] При отправке файла карточки компании")
+		// новый код chat: карточка компании из общего хранилища
+		path, err := service.CompanyCardPath(database.DB)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := e.AttachFile(path); err != nil {
 			return nil, err
 		}
 	}
 
 	if len(msg.Attachments) > 0 {
 		for _, att := range msg.Attachments {
-			if att.FilePath == "" {
+			if att.FilePath == "" && att.StoredFileID == nil {
 				continue
 			}
 
-			if _, err := e.AttachFile(att.FilePath); err != nil {
-				log.Fatalf("[Ошибка] При отправке файла id=%d произошла ошибка", att.ID)
+			// новый код chat: чтение по ключу, исходное имя во вложении
+			path, err := service.FileLocation(database.DB, att.StoredFileID, att.FilePath)
+			if err != nil {
 				return nil, err
 			}
+			attachment, err := e.AttachFile(path)
+			if err != nil {
+				return nil, err
+			}
+			attachment.Filename = att.FileName
 		}
 	}
 	return e.Bytes()

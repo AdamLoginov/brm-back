@@ -22,6 +22,7 @@ func InitDB() {
 	}
 
 	DB.AutoMigrate(
+		&models.StoredFile{},                           // новый код chat: реестр файлов
 		&models.Notification{},                         // новый код chat: уведомления задач
 		&models.SalaryApprovalBatch{},                  // новый код chat: идемпотентное применение выбора
 		&models.SalaryPaymentDraft{},                   // --------- новый код chat: индивидуальные выплаты и согласования
