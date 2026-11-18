@@ -35,22 +35,87 @@ func notifyTask(tx *gorm.DB, t models.Task, actor models.User, recipient uint, k
 	}
 	return tx.Create(&models.Notification{RecipientID: recipient, TaskID: t.ID, ActorID: actor.ID, ActorName: actor.Login, Kind: kind, TaskMessage: t.Message}).Error
 }
+
+// --------- новый код chat: несколько исполнителей, единое завершение и персональные уведомления
+var ErrTaskForbidden = errors.New("Выполнить или вернуть задачу в работу может только автор или исполнитель")
+
+func taskUsers(task models.Task) []uint {
+	ids := []uint{}
+	for _, user := range task.Assignees {
+		ids = append(ids, user.ID)
+	}
+	if len(ids) == 0 && task.ToUserID != 0 {
+		ids = append(ids, task.ToUserID)
+	}
+	return ids
+}
+func containsTaskUser(ids []uint, id uint) bool {
+	for _, value := range ids {
+		if value == id {
+			return true
+		}
+	}
+	return false
+}
+func resolveTaskUsers(tx *gorm.DB, input models.Task) ([]models.User, error) {
+	ids := input.AssigneeIDs
+	if ids == nil {
+		ids = []uint{}
+		if input.ToUserID != 0 {
+			ids = append(ids, input.ToUserID)
+		}
+	}
+	users := []models.User{}
+	seen := map[uint]bool{}
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		user, err := notificationActor(tx, id)
+		if err != nil {
+			return nil, err
+		}
+		users = append(users, user)
+	}
+	return users, nil
+}
+func saveTaskUsers(tx *gorm.DB, task *models.Task, users []models.User) error {
+	if err := tx.Model(task).Association("Assignees").Replace(users); err != nil {
+		return err
+	}
+	task.Assignees = users
+	task.ToUserID = 0
+	if len(users) > 0 {
+		task.ToUserID = users[0].ID
+	}
+	return tx.Model(task).Update("to_user_id", task.ToUserID).Error
+}
 func CreateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task) (models.Task, error) {
 	taskNotificationMutex.Lock()
 	defer taskNotificationMutex.Unlock()
-	task := models.Task{Message: input.Message, ToUserID: input.ToUserID, FromUserID: actorID, Priority: input.Priority, Status: false}
+	task := models.Task{Message: input.Message, FromUserID: actorID, Priority: input.Priority}
 	err := db.Transaction(func(tx *gorm.DB) error {
 		actor, err := notificationActor(tx, actorID)
 		if err != nil {
 			return err
 		}
-		if err = taskRecipient(tx, task.ToUserID); err != nil {
+		users, err := resolveTaskUsers(tx, input)
+		if err != nil {
 			return err
 		}
-		if err = tx.Create(&task).Error; err != nil {
+		if err = tx.Omit("Assignees", "CompletedBy", "ToUser", "FromUser").Create(&task).Error; err != nil {
 			return err
 		}
-		return notifyTask(tx, task, actor, task.ToUserID, "assigned")
+		if err = saveTaskUsers(tx, &task, users); err != nil {
+			return err
+		}
+		for _, user := range users {
+			if err = notifyTask(tx, task, actor, user.ID, "assigned"); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	return task, err
 }
@@ -66,49 +131,79 @@ func UpdateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task, c
 		if input.ID == 0 {
 			return gorm.ErrRecordNotFound
 		}
-		if err = tx.First(&task, input.ID).Error; err != nil {
+		if err = tx.Preload("Assignees").First(&task, input.ID).Error; err != nil {
 			return err
 		}
-		previousStatus, previousRecipient := task.Status, task.ToUserID
+		previousStatus := task.Status
+		previousUsers := taskUsers(task)
+		nextStatus := input.Status
 		if completeOnly {
-			task.Status = true
-		} else {
+			nextStatus = true
+		}
+		// Проверка по прежнему составу: нельзя добавить себя и закрыть задачу одним запросом.
+		if (completeOnly || previousStatus != nextStatus) && actorID != task.FromUserID && !containsTaskUser(previousUsers, actorID) {
+			return ErrTaskForbidden
+		}
+		task.Status = nextStatus
+		if !completeOnly {
 			task.Message = input.Message
-			task.Status = input.Status
 			task.Priority = input.Priority
-			task.ToUserID = input.ToUserID
+			// Старый клиент может менять одиночное назначение; новые клиенты передают явный массив.
+			if input.AssigneeIDs == nil && input.ToUserID == task.ToUserID {
+				input.AssigneeIDs = previousUsers
+			}
+			users, err := resolveTaskUsers(tx, input)
+			if err != nil {
+				return err
+			}
+			if err = saveTaskUsers(tx, &task, users); err != nil {
+				return err
+			}
 		}
-		if err = taskRecipient(tx, task.ToUserID); err != nil {
-			return err
-		}
-		// --------- новый код chat: дата фиксируется только при переходе в выполненное состояние
 		if !previousStatus && task.Status {
 			now := time.Now().UTC()
 			task.CompletedAt = &now
+			task.CompletedByID = &actorID
 		} else if !task.Status {
 			task.CompletedAt = nil
+			task.CompletedByID = nil
 		}
-		// --------- конец нового кода chat
-		if err = tx.Model(&task).Select("Message", "Status", "Priority", "ToUserID", "CompletedAt").Updates(&task).Error; err != nil { // новый код chat: сохраняем дату, включая очистку
+		if err = tx.Model(&task).Select("Message", "Status", "Priority", "CompletedAt", "CompletedByID").Updates(&task).Error; err != nil {
 			return err
 		}
-		// Возврат с переназначением даёт новому исполнителю одно уведомление о возврате.
-		if previousStatus && !task.Status {
-			if err = notifyTask(tx, task, actor, task.ToUserID, "reopened"); err != nil {
-				return err
+		recipients := taskUsers(task)
+		for _, id := range recipients {
+			kind := ""
+			if previousStatus && !task.Status {
+				kind = "reopened"
+			} else if !containsTaskUser(previousUsers, id) {
+				kind = "assigned"
 			}
-		} else if previousRecipient != task.ToUserID {
-			if err = notifyTask(tx, task, actor, task.ToUserID, "assigned"); err != nil {
-				return err
+			if kind != "" {
+				if err = notifyTask(tx, task, actor, id, kind); err != nil {
+					return err
+				}
 			}
 		}
 		if !previousStatus && task.Status {
-			return notifyTask(tx, task, actor, task.FromUserID, "completed")
+			recipients = append(recipients, task.FromUserID)
+			seen := map[uint]bool{actorID: true}
+			for _, id := range recipients {
+				if seen[id] {
+					continue
+				}
+				seen[id] = true
+				if err = notifyTask(tx, task, actor, id, "completed"); err != nil {
+					return err
+				}
+			}
 		}
 		return nil
 	})
 	return task, err
 }
+
+// --------- конец нового кода chat
 func DeleteTaskWithNotifications(db *gorm.DB, actorID, id uint) error {
 	taskNotificationMutex.Lock()
 	defer taskNotificationMutex.Unlock()
@@ -126,6 +221,9 @@ func DeleteTaskWithNotifications(db *gorm.DB, actorID, id uint) error {
 		if err := tx.Unscoped().Where("task_id = ?", id).Delete(&models.Notification{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Model(&task).Association("Assignees").Clear(); err != nil {
+			return err
+		} // новый код chat
 		return tx.Delete(&task).Error
 	})
 }

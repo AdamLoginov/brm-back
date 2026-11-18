@@ -67,8 +67,8 @@ func TestTaskNotificationLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertKinds(u[2].ID, "assigned")
-	// Завершить может любой пользователь, в уведомлении фиксируется фактический автор действия.
-	task, err = UpdateTaskWithNotifications(db, u[1].ID, task, true)
+	// новый код chat: завершает назначенный исполнитель, не снятый участник.
+	task, err = UpdateTaskWithNotifications(db, u[2].ID, task, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestTaskNotificationLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if list.Items[0].ActorID != u[1].ID || list.Items[0].ActorName != "executor" || list.Items[0].TaskMessage != task.Message {
+	if list.Items[0].ActorID != u[2].ID || list.Items[0].ActorName != "other" || list.Items[0].TaskMessage != task.Message {
 		t.Fatal("actor/snapshot")
 	}
 	_, err = UpdateTaskWithNotifications(db, u[2].ID, task, true)
@@ -151,7 +151,7 @@ func TestTaskSelfNotificationAndConcurrentCompletion(t *testing.T) {
 		}
 	}
 	list, err := ListNotifications(db, u[0].ID, 1)
-	if err != nil || list.Total != 2 || list.Items[0].Kind != "completed" || list.Items[1].Kind != "assigned" {
+	if err != nil || list.Total != 1 || list.Items[0].Kind != "assigned" {
 		t.Fatal("self/duplicate", list, err)
 	}
 }
@@ -238,6 +238,125 @@ func TestTaskCompletionTime(t *testing.T) {
 	legacy, err = UpdateTaskWithNotifications(db, u[0].ID, legacy, false)
 	if err != nil || legacy.CompletedAt != nil {
 		t.Fatal("invented historical date", err)
+	}
+}
+
+// --------- конец нового кода chat
+
+// --------- новый код chat: общая задача, права, несколько получателей и повторное выполнение
+func TestSharedTaskParticipantsAndCompletion(t *testing.T) {
+	db, u := notificationFixture(t)
+	task, err := CreateTaskWithNotifications(db, u[0].ID, models.Task{Message: "Общая", AssigneeIDs: []uint{u[0].ID, u[1].ID, u[2].ID, u[1].ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(task.Assignees) != 3 {
+		t.Fatal("duplicate participant", task.Assignees)
+	}
+	for _, user := range u {
+		list, err := ListNotifications(db, user.ID, 1)
+		if err != nil || list.Total != 1 || list.Items[0].Kind != "assigned" {
+			t.Fatal("assignment", list, err)
+		}
+	}
+	outsider := models.User{Login: "outsider"}
+	db.Create(&outsider)
+	forged := task
+	forged.AssigneeIDs = []uint{outsider.ID}
+	forged.Status = true
+	if _, err = UpdateTaskWithNotifications(db, outsider.ID, forged, false); !errors.Is(err, ErrTaskForbidden) {
+		t.Fatal("unauthorized status change", err)
+	}
+	if _, err = UpdateTaskWithNotifications(db, outsider.ID, task, true); !errors.Is(err, ErrTaskForbidden) {
+		t.Fatal("unauthorized completion", err)
+	}
+	// Два участника одновременно завершают задачу: один исполнитель, одна рассылка.
+	var wg sync.WaitGroup
+	failures := make(chan error, 2)
+	for _, id := range []uint{u[1].ID, u[2].ID} {
+		wg.Add(1)
+		go func(id uint) { defer wg.Done(); _, e := UpdateTaskWithNotifications(db, id, task, true); failures <- e }(id)
+	}
+	wg.Wait()
+	close(failures)
+	for e := range failures {
+		if e != nil {
+			t.Fatal(e)
+		}
+	}
+	var stored models.Task
+	db.First(&stored, task.ID)
+	if stored.CompletedByID == nil || stored.CompletedAt == nil {
+		t.Fatal("missing completion identity")
+	}
+	completedBy := *stored.CompletedByID
+	for _, user := range u {
+		list, e := ListNotifications(db, user.ID, 1)
+		expected := int64(2)
+		if user.ID == completedBy {
+			expected = 1
+		}
+		if e != nil || list.Total != expected {
+			t.Fatal("duplicate/missing completion", user.ID, list, e)
+		}
+		if expected == 2 && (list.Items[0].ActorID != completedBy || list.Items[0].Kind != "completed") {
+			t.Fatal("wrong actor")
+		}
+	}
+	stored.Status = false
+	stored.AssigneeIDs = []uint{u[0].ID, u[1].ID, u[2].ID}
+	task, err = UpdateTaskWithNotifications(db, u[0].ID, stored, false)
+	if err != nil || task.CompletedByID != nil || task.CompletedAt != nil {
+		t.Fatal("reopen", err)
+	}
+	for _, user := range u {
+		list, _ := ListNotifications(db, user.ID, 1)
+		if list.Items[0].Kind != "reopened" {
+			t.Fatal("reopen notification")
+		}
+	}
+	task.Status = true
+	task, err = UpdateTaskWithNotifications(db, u[0].ID, task, false)
+	if err != nil || task.CompletedByID == nil || *task.CompletedByID != u[0].ID {
+		t.Fatal("repeat completion", err)
+	}
+}
+func TestSharedTaskChangesAndInvalidRecipient(t *testing.T) {
+	db, u := notificationFixture(t)
+	task, err := CreateTaskWithNotifications(db, u[0].ID, models.Task{AssigneeIDs: []uint{u[1].ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task.AssigneeIDs = []uint{u[1].ID, u[2].ID}
+	task, err = UpdateTaskWithNotifications(db, u[0].ID, task, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range []uint{u[1].ID, u[2].ID} {
+		list, _ := ListNotifications(db, id, 1)
+		if list.Total != 1 {
+			t.Fatal("existing assignee notified twice")
+		}
+	}
+	task.AssigneeIDs = []uint{u[2].ID, 999999}
+	if _, err = UpdateTaskWithNotifications(db, u[0].ID, task, false); !errors.Is(err, ErrTaskUser) {
+		t.Fatal("invalid recipient accepted", err)
+	}
+	var stored models.Task
+	db.Preload("Assignees").First(&stored, task.ID)
+	if len(stored.Assignees) != 2 {
+		t.Fatal("failed edit changed participants")
+	}
+	task.AssigneeIDs = []uint{}
+	task, err = UpdateTaskWithNotifications(db, u[0].ID, task, false)
+	if err != nil || task.ToUserID != 0 || len(task.Assignees) != 0 {
+		t.Fatal("clear participants", err)
+	}
+	if _, err = UpdateTaskWithNotifications(db, u[1].ID, task, true); !errors.Is(err, ErrTaskForbidden) {
+		t.Fatal("removed user can complete", err)
+	}
+	if _, err = UpdateTaskWithNotifications(db, u[0].ID, task, true); err != nil {
+		t.Fatal("author cannot complete unassigned task", err)
 	}
 }
 

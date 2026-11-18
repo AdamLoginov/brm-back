@@ -56,4 +56,19 @@ func InitDB() {
 		&models.Payment{},
 		&models.Task{},
 	)
+	// --------- новый код chat: перенос назначений после обновления схемы
+	if err := migrateTaskAssignees(DB); err != nil {
+		panic(err)
+	}
 }
+
+// --------- новый код chat: повторный запуск не возвращает снятых участников
+func migrateTaskAssignees(db *gorm.DB) error {
+	return db.Exec(`INSERT INTO task_assignees (task_id, user_id)
+ SELECT tasks.id, tasks.to_user_id FROM tasks
+ WHERE tasks.to_user_id > 0
+ AND EXISTS (SELECT 1 FROM users WHERE users.id = tasks.to_user_id)
+ AND NOT EXISTS (SELECT 1 FROM task_assignees WHERE task_assignees.task_id = tasks.id)`).Error
+}
+
+// --------- конец нового кода chat

@@ -428,6 +428,12 @@ type Tool struct {
 
 type Task struct {
 	gorm.Model
+	// --------- новый код chat: участники общей задачи и фактический исполнитель
+	Assignees     []User `gorm:"many2many:task_assignees;" json:"assignees"`
+	AssigneeIDs   []uint `gorm:"-" json:"assignee_ids,omitempty"`
+	CompletedByID *uint  `json:"completed_by_id"`
+	CompletedBy   User   `gorm:"foreignKey:CompletedByID" json:"completed_by"`
+	// --------- конец нового кода chat
 	CompletedAt *time.Time `json:"completed_at"` // новый код chat: время последнего выполнения, nil до выполнения
 	Message     string     `json:"message"`
 	Status      bool       `json:"status"`
