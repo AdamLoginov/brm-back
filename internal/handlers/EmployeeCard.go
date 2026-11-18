@@ -19,7 +19,7 @@ func GetEmployeeCardDetailHandler(w http.ResponseWriter, r *http.Request) {
 	var employeeCardId = r.PathValue("id")
 	var employeeCard models.EmployeeCard
 
-	if err := database.DB.Preload("EmployeeDocuments.CategoryEmployeeDocument").Preload("Agreement").First(&employeeCard, employeeCardId).Error; err != nil {
+	if err := database.DB.Preload("Specializations").Preload("EmployeeDocuments.CategoryEmployeeDocument").Preload("Agreement").First(&employeeCard, employeeCardId).Error; err != nil {
 		msg := "[Error] Ошибка при получении данных"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)
@@ -46,7 +46,7 @@ func GetAllEmployeeCardAgreementHandler(w http.ResponseWriter, r *http.Request) 
 
 func GetAllEmployeeCardHandler(w http.ResponseWriter, r *http.Request) {
 	var employeeCard []models.EmployeeCard
-	if err := database.DB.Preload("Agreement").Find(&employeeCard).Error; err != nil {
+	if err := database.DB.Preload("Specializations").Preload("Agreement").Find(&employeeCard).Error; err != nil {
 		msg := "[Error] Ошибка получения карточек сотрудников"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusInternalServerError)
@@ -65,11 +65,14 @@ func CreateEmployeeCardHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Некорректные данные карточки сотрудника", http.StatusBadRequest)
 		return
 	}
+	if !validateEmployeeSizes(w, &employeeCard) { // новый код chat: проверка роста
+		return
+	}
 	if !validateEmployeeEmployment(w, &employeeCard) {
 		return
 	}
 	// --------- конец нового кода chat
-	if err := database.DB.Create(&employeeCard).Error; err != nil {
+	if err := saveEmployeeProfile(&employeeCard, ""); err != nil {
 		msg := "[Error] Не удалось создать карточку сотрудника"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusInternalServerError)
@@ -91,11 +94,13 @@ func UpdateEmployeeCardHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if !validateEmployeeSizes(w, &employeeCard) { // новый код chat: проверка роста
+		return
+	}
 	if !validateEmployeeEmployment(w, &employeeCard) {
 		return
 	} // новый код chat: проверка месячной зарплаты при изменении
-	if err := database.DB.Model(&models.EmployeeCard{}).Where("id = ?", employeeCardID).Select("*").
-		Omit("id", "created_at", "updated_at", "agreement", "employee_documents").Updates(employeeCard).Error; err != nil {
+	if err := saveEmployeeProfile(&employeeCard, employeeCardID); err != nil {
 		msg := "[Error] Ошибка при обнавлении данных"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)
@@ -208,13 +213,23 @@ func PutAgreementEmployeeCard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "[ERROR] Ошибка в получении данных ", http.StatusBadRequest)
 		return
 	}
-	log.Println("------------------------")
-	log.Println(idEmployeeCard, input.AgreementID)
-	if err := database.DB.Model(&models.EmployeeCard{}).Where("id = ?", idEmployeeCard).Update("agreement_id", input.AgreementID); err != nil {
-		log.Println("[ERROR] Ошибка при внесении данных в базу ")
-		http.Error(w, "[ERROR] Ошибка при внесении данных в базу ", http.StatusBadRequest)
+	// --------- новый код chat: нельзя заново закрепить уволенного сотрудника
+	employeeProfileMutex.Lock()
+	defer employeeProfileMutex.Unlock()
+	var employee models.EmployeeCard
+	if database.DB.First(&employee, "id = ?", idEmployeeCard).Error != nil {
+		http.Error(w, "Сотрудник не найден", http.StatusNotFound)
 		return
 	}
+	if employee.Status && input.AgreementID != 0 {
+		http.Error(w, "Уволенного сотрудника нельзя закрепить за договором", http.StatusBadRequest)
+		return
+	}
+	if err := database.DB.Model(&employee).Update("agreement_id", input.AgreementID).Error; err != nil {
+		http.Error(w, "Не удалось изменить договор сотрудника", http.StatusInternalServerError)
+		return
+	}
+	// --------- конец нового кода chat
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(models.Response{Message: "Карточка сотрудника успешно обновлена!"})

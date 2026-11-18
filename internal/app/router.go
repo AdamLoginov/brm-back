@@ -9,6 +9,12 @@ import (
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
 
+	// --------- новый код chat: управление справочником для авторизованных пользователей
+	mux.HandleFunc("GET /api/employee-specializations", middleware.AuthMiddleware(handlers.ListEmployeeSpecializations))
+	mux.HandleFunc("POST /api/employee-specializations", middleware.AuthMiddleware(handlers.SaveEmployeeSpecialization))
+	mux.HandleFunc("POST /api/employee-specializations/{id}", middleware.AuthMiddleware(handlers.SaveEmployeeSpecialization))
+	mux.HandleFunc("DELETE /api/employee-specializations/{id}", middleware.AuthMiddleware(handlers.DeleteEmployeeSpecialization))
+	// --------- конец нового кода chat
 	mux.HandleFunc("GET /api/employeecards", middleware.AuthMiddleware(handlers.GetAllEmployeeCardHandler))
 	mux.HandleFunc("GET /api/employeescard/{id}/detail", middleware.AuthMiddleware(handlers.GetEmployeeCardDetailHandler))
 	mux.HandleFunc("GET /api/employeescard/document/{id}/detail", middleware.AuthMiddleware(handlers.GetEmployeeCardDocumentDetailHandler))

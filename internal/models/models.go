@@ -9,8 +9,21 @@ type Response struct {
 	Message string `json:"message"`
 }
 
+// --------- новый код chat: общий справочник специализаций
+type EmployeeSpecialization struct {
+	ID   uint   `gorm:"primaryKey" json:"ID"`
+	Name string `gorm:"not null;uniqueIndex" json:"name"`
+}
+
+// --------- конец нового кода chat
+
 type EmployeeCard struct {
 	gorm.Model
+	// --------- новый код chat: телефоны и специализации для будущей фильтрации
+	Phones            []string                 `gorm:"serializer:json" json:"phones"`
+	Specializations   []EmployeeSpecialization `gorm:"many2many:employee_card_specializations;" json:"specializations"`
+	SpecializationIDs []uint                   `gorm:"-" json:"specialization_ids,omitempty"`
+	// --------- конец нового кода chat
 	Name             string  `gorm:"not null" json:"name"`
 	MiddleName       *string `json:"middle_name"`
 	Surname          *string `json:"surname"`
@@ -30,6 +43,12 @@ type EmployeeCard struct {
 	// --------- новый код chat: официальное трудоустройство и месячная зарплата в копейках
 	OfficiallyEmployed   bool  `gorm:"not null;default:false" json:"officially_employed"`
 	MonthlySalaryKopecks int64 `gorm:"not null;default:0" json:"monthly_salary_kopecks"`
+	// --------- конец нового кода chat
+	// --------- новый код chat: размеры сотрудника и принадлежность к ИТР
+	ClothingSize string `json:"clothing_size"`
+	ShoeSize     string `json:"shoe_size"`
+	HeightCM     *int   `json:"height_cm"`
+	IsITR        bool   `gorm:"not null;default:false" json:"is_itr"`
 	// --------- конец нового кода chat
 	Status            bool                `json:"status"`
 	AgreementID       uint                `json:"agreement_id"`
