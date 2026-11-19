@@ -8,6 +8,12 @@ import (
 
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
+	// --------- новый код chat: контакты доступны только авторизованным пользователям
+	mux.HandleFunc("GET /api/agreements/{id}/contacts", middleware.AuthMiddleware(handlers.AgreementContactHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/contacts/create", middleware.AuthMiddleware(handlers.AgreementContactHandler)) // новый код chat: без конфликта с изменением договора
+	mux.HandleFunc("PATCH /api/agreements/{id}/contacts/{contactId}", middleware.AuthMiddleware(handlers.AgreementContactHandler))
+	mux.HandleFunc("DELETE /api/agreements/{id}/contacts/{contactId}", middleware.AuthMiddleware(handlers.AgreementContactHandler))
+	// --------- конец нового кода chat
 
 	// --------- новый код chat: управление справочником для авторизованных пользователей
 	mux.HandleFunc("GET /api/employee-specializations", middleware.AuthMiddleware(handlers.ListEmployeeSpecializations))

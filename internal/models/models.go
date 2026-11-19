@@ -176,6 +176,19 @@ type Agreement struct {
 	EmployeeCard []EmployeeCard `gorm:"foreingKey:AgreementID" json:"employee_card"`
 }
 
+// --------- новый код chat: представители другой стороны договора, отдельно от сотрудников
+type AgreementContact struct {
+	gorm.Model
+	AgreementID uint     `gorm:"not null;index" json:"agreement_id"`
+	FullName    string   `gorm:"not null" json:"full_name"`
+	Position    string   `json:"position"`
+	Phones      []string `gorm:"serializer:json" json:"phones"`
+	Emails      []string `gorm:"serializer:json" json:"emails"`
+	Comment     string   `json:"comment"`
+}
+
+// --------- конец нового кода chat
+
 type Estimate struct {
 	gorm.Model
 	Name        string      `gorm:"not null" json:"name"`

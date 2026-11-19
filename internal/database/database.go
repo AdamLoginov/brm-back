@@ -29,6 +29,7 @@ func InitDB() {
 		&models.SalaryDebt{}, &models.SalaryApproval{}, // новый код chat: долги и согласования
 		&models.SalaryBonus{}, // новый код chat: премии за месяц
 		&models.Agreement{},
+		&models.AgreementContact{}, // новый код chat: контакты контрагента
 		&models.EmployeeCard{},
 		&models.EmployeeSpecialization{}, // новый код chat: справочник специализаций
 		&models.EmployeeBalance{},
