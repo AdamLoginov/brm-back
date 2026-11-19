@@ -101,6 +101,7 @@ type DailyAllowanceCell struct {
 	PreviewRequiredKopecks int64  `json:"preview_required_kopecks"` // новый код chat: сколько дополнительно выдать для полного покрытия дня
 }
 type DailyAllowanceEmployee struct {
+	IsITR            bool                 `json:"is_itr"` // новый код chat: подсветка ФИО в табеле суточных
 	EmployeeCardID   uint                 `json:"employee_card_id"`
 	EmployeeName     string               `json:"employee_name"`
 	IsAssigned       bool                 `json:"is_assigned"`
@@ -155,10 +156,12 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 			return err
 		}
 		people := map[uint]string{}
+		itrMembers := map[uint]bool{}   // новый код chat: признак из карточки сотрудника
 		tableMembers := map[uint]bool{} // новый код chat: показываем только сотрудников выбранного табеля
 		for _, employee := range selected.Employees {
 			people[employee.ID] = dailyEmployeeName(employee)
-			tableMembers[employee.ID] = true // новый код chat
+			tableMembers[employee.ID] = true         // новый код chat
+			itrMembers[employee.ID] = employee.IsITR // новый код chat
 		}
 		var current []models.EmployeeCard
 		if err := tx.Where("agreement_id = ?", agreementID).Find(&current).Error; err != nil {
@@ -298,7 +301,7 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 			if !tableMembers[id] {
 				continue
 			} // новый код chat: история и другие сотрудники договора не расширяют список
-			employee := DailyAllowanceEmployee{EmployeeCardID: id, EmployeeName: name, IsAssigned: assigned[id], BalanceKopecks: paid[id] - earned[id], Cells: []DailyAllowanceCell{}}
+			employee := DailyAllowanceEmployee{EmployeeCardID: id, EmployeeName: name, IsITR: itrMembers[id], IsAssigned: assigned[id], BalanceKopecks: paid[id] - earned[id], Cells: []DailyAllowanceCell{}}
 			if through != "" && employee.IsAssigned {
 				if result.RateKopecks <= 0 {
 					return dailyError("Укажите суточные в выбранном табеле")
