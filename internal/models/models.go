@@ -408,6 +408,7 @@ type SalaryPenalty struct {
 
 type Expenses struct {
 	gorm.Model
+	ExpenseDate    string       `gorm:"not null;default:''" json:"expense_date"`     // новый код chat: дата расхода отдельно от создания записи
 	IsReimbursed   bool         `gorm:"not null;default:false" json:"is_reimbursed"` // новый код chat: возмещён ли личный расход
 	AgreementId    uint         `json:"agreement_id"`
 	EmployeeCardId uint         `json:"employee_card_id"`

@@ -133,6 +133,7 @@ func NewRouter() http.Handler {
 	// --------- конец нового кода chat
 	mux.HandleFunc("PATCH /api/agreements/{id}/expenses/{expenseId}/status", middleware.AuthMiddleware(handlers.UpdateExpenseReimbursementHandler)) // новый код chat: статус возмещения
 	mux.HandleFunc("POST /api/agreements/{id}/expenses/create", middleware.AuthMiddleware(handlers.CreateExpensesHandler))
+	mux.HandleFunc("PATCH /api/agreements/{id}/expenses/{expenseId}", middleware.AuthMiddleware(handlers.UpdateExpensesHandler)) // новый код chat: редактирование расхода
 	mux.HandleFunc("POST /api/agreements/update/{id}", middleware.AuthMiddleware(handlers.UpdateAgreementHandler))
 	mux.HandleFunc("GET /api/agreements/{id}/expenses", middleware.AuthMiddleware(handlers.GetAgreementExpensesHandler))
 	mux.HandleFunc("DELETE /api/expenses/delete/{id}", middleware.AuthMiddleware(handlers.DeleteExpensesHandleer))

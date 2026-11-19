@@ -72,3 +72,68 @@ func TestExpenseReimbursementStatus(t *testing.T) {
 }
 
 // --------- конец нового кода chat
+// --------- новый код chat: даты, редактирование и сохранение статуса
+func TestExpenseEditing(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "edit.db")), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := database.DB
+	database.DB = db
+	t.Cleanup(func() { database.DB = previous; sqlDB, _ := db.DB(); sqlDB.Close() })
+	if err := db.AutoMigrate(&models.Agreement{}, &models.EmployeeCard{}, &models.Expenses{}); err != nil {
+		t.Fatal(err)
+	}
+	agreement := models.Agreement{Name: "Test"}
+	db.Create(&agreement)
+	employee := models.EmployeeCard{Name: "Test"}
+	db.Create(&employee)
+	call := func(id uint, expenseID uint, body string, create bool) int {
+		req := httptest.NewRequest("POST", "/", strings.NewReader(body))
+		req.SetPathValue("id", strconv.Itoa(int(id)))
+		req.SetPathValue("expenseId", strconv.Itoa(int(expenseID)))
+		res := httptest.NewRecorder()
+		if create {
+			CreateExpensesHandler(res, req)
+		} else {
+			UpdateExpensesHandler(res, req)
+		}
+		return res.Code
+	}
+	body := `{"name":"Test","price":123.45,"account":"employee","employee_card_id":` + strconv.Itoa(int(employee.ID)) + `,"expense_date":"2026-09-15"}`
+	if code := call(agreement.ID, 0, body, true); code != 200 {
+		t.Fatalf("create: %d", code)
+	}
+	var expense models.Expenses
+	db.First(&expense)
+	created := expense.CreatedAt
+	if expense.ExpenseDate != "2026-09-15" {
+		t.Fatal("date not saved")
+	}
+	db.Model(&expense).Update("is_reimbursed", true)
+	body = strings.ReplaceAll(body, "2026-09-15", "2030-12-31")
+	if code := call(agreement.ID, expense.ID, body, false); code != 200 {
+		t.Fatalf("edit: %d", code)
+	}
+	db.First(&expense, expense.ID)
+	if !expense.IsReimbursed || expense.ExpenseDate != "2030-12-31" || !expense.CreatedAt.Equal(created) {
+		t.Fatal("date/status changed incorrectly")
+	}
+	if code := call(agreement.ID+100, expense.ID, body, false); code != 404 {
+		t.Fatal("cross-agreement update")
+	}
+	for _, date := range []string{"", "2026-02-30", "2026-1-1"} {
+		if code := call(agreement.ID, expense.ID, strings.ReplaceAll(body, "2030-12-31", date), false); code != 400 {
+			t.Fatal("invalid date accepted")
+		}
+	}
+	if code := call(agreement.ID, expense.ID, strings.ReplaceAll(body, `"account":"employee"`, `"account":"company"`), false); code != 200 {
+		t.Fatal("account update failed")
+	}
+	db.First(&expense, expense.ID)
+	if expense.IsReimbursed {
+		t.Fatal("reimbursement not reset")
+	}
+}
+
+// --------- конец нового кода chat
