@@ -134,6 +134,35 @@ func TestExpenseEditing(t *testing.T) {
 	if expense.IsReimbursed {
 		t.Fatal("reimbursement not reset")
 	}
+	// --------- новый код chat: категория сохраняется и сбрасывается без изменения возмещения
+	category := models.ExpenseCategory{Name: "Проезд", NameKey: "проезд"}
+	if err := db.Create(&category).Error; err != nil {
+		t.Fatal(err)
+	}
+	withCategory := strings.TrimSuffix(body, "}") + `,"category_id":` + strconv.Itoa(int(category.ID)) + `}`
+	if call(agreement.ID, expense.ID, withCategory, false) != 200 {
+		t.Fatal("category update failed")
+	}
+	var categorized models.Expenses
+	db.First(&categorized, expense.ID)
+	if categorized.CategoryID == nil || *categorized.CategoryID != category.ID {
+		t.Fatal("category not saved")
+	}
+	if call(agreement.ID, 0, withCategory, true) != 200 {
+		t.Fatal("create with category failed")
+	}
+	if call(agreement.ID, expense.ID, strings.TrimSuffix(body, "}")+`,"category_id":99999}`, false) != 400 {
+		t.Fatal("unknown category accepted")
+	}
+	if call(agreement.ID, expense.ID, strings.TrimSuffix(body, "}")+`,"category_id":null}`, false) != 200 {
+		t.Fatal("category reset failed")
+	}
+	var cleared models.Expenses
+	db.First(&cleared, expense.ID)
+	if cleared.CategoryID != nil {
+		t.Fatal("category not cleared")
+	}
+	// --------- конец нового кода chat
 }
 
 // --------- конец нового кода chat

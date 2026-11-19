@@ -16,6 +16,14 @@ import (
 
 // --------- новый код chat: проверка даты, суммы, счёта и сотрудника
 func validateExpenseInput(expense *models.Expenses) error {
+	// --------- новый код chat: только существующая категория или отсутствие категории
+	if expense.CategoryID != nil {
+		var category models.ExpenseCategory
+		if *expense.CategoryID == 0 || database.DB.First(&category, *expense.CategoryID).Error != nil {
+			return errors.New("Категория расхода не найдена")
+		}
+	}
+	// --------- конец нового кода chat
 	date, err := time.Parse("2006-01-02", expense.ExpenseDate)
 	if err != nil || date.Year() < 1 || date.Format("2006-01-02") != expense.ExpenseDate {
 		return errors.New("Укажите корректную дату расхода")
@@ -52,6 +60,7 @@ func UpdateExpensesHandler(w http.ResponseWriter, r *http.Request) {
 		Account        string  `json:"account"`
 		EmployeeCardID uint    `json:"employee_card_id"`
 		ExpenseDate    string  `json:"expense_date"`
+		CategoryID     *uint   `json:"category_id"` // новый код chat
 	}
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64*1024))
 	decoder.DisallowUnknownFields()
@@ -60,6 +69,7 @@ func UpdateExpensesHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	values := models.Expenses{Name: input.Name, Price: input.Price, Account: input.Account, EmployeeCardId: input.EmployeeCardID, ExpenseDate: input.ExpenseDate}
+	values.CategoryID = input.CategoryID // новый код chat
 	if err := validateExpenseInput(&values); err != nil {
 		http.Error(w, err.Error(), 400)
 		return
@@ -77,6 +87,7 @@ func UpdateExpensesHandler(w http.ResponseWriter, r *http.Request) {
 			"name": values.Name, "price": values.Price, "account": values.Account,
 			"employee_card_id": values.EmployeeCardId, "expense_date": values.ExpenseDate,
 			"is_reimbursed": reimbursed,
+			"category_id":   values.CategoryID, // новый код chat: map сохраняет также NULL
 		}).Error; err != nil {
 			return err
 		}

@@ -45,6 +45,7 @@ func InitDB() {
 		&models.Dialog{},
 		&models.Attachment{},
 		&models.Expenses{},
+		&models.ExpenseCategory{}, // новый код chat: общие категории расходов
 		&models.Tool{},
 		&models.TimeSheet{},
 		&models.TimeSheetMonth{},

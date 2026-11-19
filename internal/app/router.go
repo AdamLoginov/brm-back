@@ -112,6 +112,10 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/agreements", middleware.AuthMiddleware(handlers.GetAllAgreementHandler))
 
 	// Expenses
+	mux.HandleFunc("GET /api/expense-categories", middleware.AuthMiddleware(handlers.ListExpenseCategories))         // новый код chat
+	mux.HandleFunc("POST /api/expense-categories", middleware.AuthMiddleware(handlers.SaveExpenseCategory))          // новый код chat
+	mux.HandleFunc("PATCH /api/expense-categories/{id}", middleware.AuthMiddleware(handlers.SaveExpenseCategory))    // новый код chat
+	mux.HandleFunc("DELETE /api/expense-categories/{id}", middleware.AuthMiddleware(handlers.DeleteExpenseCategory)) // новый код chat
 	// --------- новый код chat: долги и согласование начислений
 	mux.HandleFunc("GET /api/agreements/{id}/debts", middleware.AuthMiddleware(handlers.SalaryDebtHandler))
 	mux.HandleFunc("POST /api/agreements/{id}/debts/create", middleware.AuthMiddleware(handlers.SalaryDebtHandler))

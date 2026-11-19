@@ -406,16 +406,27 @@ type SalaryPenalty struct {
 
 // --------- конец нового кода chat
 
+// --------- новый код chat: общий справочник категорий расходов
+type ExpenseCategory struct {
+	ID      uint   `gorm:"primaryKey" json:"ID"`
+	Name    string `gorm:"not null" json:"name"`
+	NameKey string `gorm:"not null;uniqueIndex" json:"-"`
+}
+
+// --------- конец нового кода chat
+
 type Expenses struct {
 	gorm.Model
-	ExpenseDate    string       `gorm:"not null;default:''" json:"expense_date"`     // новый код chat: дата расхода отдельно от создания записи
-	IsReimbursed   bool         `gorm:"not null;default:false" json:"is_reimbursed"` // новый код chat: возмещён ли личный расход
-	AgreementId    uint         `json:"agreement_id"`
-	EmployeeCardId uint         `json:"employee_card_id"`
-	EmployeeCard   EmployeeCard `gorm:"foreignKey:EmployeeCardId" json:"employee_card"`
-	Name           string       `json:"name"`
-	Price          float64      `json:"price"`
-	Account        string       `json:"account"`
+	CategoryID     *uint            `gorm:"index" json:"category_id"`                    // новый код chat: nil — без категории
+	Category       *ExpenseCategory `gorm:"constraint:OnDelete:SET NULL;" json:"-"`      // новый код chat
+	ExpenseDate    string           `gorm:"not null;default:''" json:"expense_date"`     // новый код chat: дата расхода отдельно от создания записи
+	IsReimbursed   bool             `gorm:"not null;default:false" json:"is_reimbursed"` // новый код chat: возмещён ли личный расход
+	AgreementId    uint             `json:"agreement_id"`
+	EmployeeCardId uint             `json:"employee_card_id"`
+	EmployeeCard   EmployeeCard     `gorm:"foreignKey:EmployeeCardId" json:"employee_card"`
+	Name           string           `json:"name"`
+	Price          float64          `json:"price"`
+	Account        string           `json:"account"`
 }
 
 type Tool struct {
