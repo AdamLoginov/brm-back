@@ -8,6 +8,7 @@ import (
 
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/positions/excel", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler)) // новый код chat: сводка всех позиций
 	// --------- новый код chat: Excel доступен с той же авторизацией, что и книга
 	mux.HandleFunc("POST /api/agreements/{id}/work-orders/books/{bookId}/excel/{excelAction}", middleware.AuthMiddleware(handlers.WorkOrderExcelHandler))
 	// --------- конец нового кода chat
