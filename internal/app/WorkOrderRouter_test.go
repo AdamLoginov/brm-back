@@ -2,15 +2,20 @@
 package app
 
 import (
+	"bytes" // новый код chat: multipart Excel через реальные маршруты
+	"encoding/json"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/xuri/excelize/v2"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"mime/multipart"
 	"net/http/httptest"
 	"path/filepath"
 	"project/internal/config"
 	"project/internal/database"
 	"project/internal/models"
+	"project/internal/service"
 	"strings"
 	"testing"
 	"time"
@@ -110,6 +115,73 @@ func TestWorkOrderRoutes(t *testing.T) {
 	if call("DELETE", fmt.Sprintf("/warehouse/%d", material.ID), "", true) != 204 {
 		t.Fatal("material delete route")
 	}
+	// --------- новый код chat: выгрузка, проверка и подтверждение требуют авторизации
+	excelPath := fmt.Sprintf("/work-orders/books/%d/excel", book.ID)
+	if call("GET", excelPath, "", false) != 401 || call("POST", excelPath+"/preview", "", false) != 401 {
+		t.Fatal("anonymous Excel access")
+	}
+	req := httptest.NewRequest("GET", base+excelPath+"?template=1", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, req)
+	if response.Code != 200 || !strings.Contains(response.Header().Get("Content-Type"), "spreadsheetml") {
+		t.Fatal(response.Code, response.Body.String())
+	}
+	file, err := excelize.OpenReader(bytes.NewReader(response.Body.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	for i, v := range []string{"new:api", day.Date, fmt.Sprintf("%d | Цех", shop.ID), "1"} {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
+		if err := file.SetCellStr("Смены", cell, v); err != nil {
+			t.Fatal(err)
+		}
+	}
+	xlsx, err := file.WriteToBuffer()
+	if err != nil {
+		t.Fatal(err)
+	}
+	importCall := func(action, confirmation string) service.WorkImportReport {
+		var body bytes.Buffer
+		form := multipart.NewWriter(&body)
+		part, err := form.CreateFormFile("file", "book.xlsx")
+		if err != nil {
+			t.Fatal(err)
+		}
+		part.Write(xlsx.Bytes())
+		form.WriteField("options", `{"mode":"merge","replace_shifts":[],"replace_receipts":false}`)
+		form.WriteField("token", confirmation)
+		form.Close()
+		r := httptest.NewRequest("POST", base+excelPath+"/"+action, &body)
+		r.Header.Set("Content-Type", form.FormDataContentType())
+		r.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, r)
+		if w.Code != 200 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+		var report service.WorkImportReport
+		if err := json.Unmarshal(w.Body.Bytes(), &report); err != nil {
+			t.Fatal(err)
+		}
+		if len(report.Errors) > 0 {
+			t.Fatal(report.Errors)
+		}
+		return report
+	}
+	preview := importCall("preview", "")
+	var count int64
+	db.Model(&models.WorkOrderShift{}).Count(&count)
+	if count != 0 || len(preview.Changes) != 1 || preview.Token == "" {
+		t.Fatal("preview persisted or missing plan", preview, count)
+	}
+	confirmed := importCall("confirm", preview.Token)
+	db.Model(&models.WorkOrderShift{}).Count(&count)
+	if !confirmed.Applied || count != 1 {
+		t.Fatal("confirmation failed", confirmed, count)
+	}
+	// --------- конец нового кода chat
 }
 
 // --------- конец нового кода chat

@@ -84,9 +84,12 @@ func TestWorkShiftLifecycle(t *testing.T) {
 	}
 	in.Version = shift.Version
 	in.Tasks[0].Hours = "13"
-	if _, _, err := SaveWorkShift(f.db, f.a.ID, shift.ID, in); err == nil {
-		t.Fatal("over hours accepted")
+	// новый код chat: превышение сохраняется с предупреждением.
+	shift, warning, err = SaveWorkShift(f.db, f.a.ID, shift.ID, in)
+	if err != nil || warning == "" {
+		t.Fatal("over hours warning", err, warning)
 	}
+	in.Version = shift.Version
 	balance, _ = WarehouseBalance(f.db, f.material.ID)
 	if balance != 20000 {
 		t.Fatal("failed save changed stock")

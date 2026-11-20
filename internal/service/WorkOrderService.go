@@ -244,22 +244,27 @@ func SaveWorkShift(db *gorm.DB, agreementID, shiftID uint, input WorkShiftInput)
 			if err := tx.Joins("JOIN agreement_work_blocks b ON b.id = agreement_work_positions.block_id").Where("agreement_work_positions.id = ? AND agreement_work_positions.agreement_id = ? AND b.workshop_id = ?", inputTask.PositionID, agreementID, input.WorkshopID).First(&position).Error; err != nil {
 				return errors.New("Выберите позицию блока текущего цеха")
 			}
-			var unit models.MeasurementUnit
-			if err := tx.First(&unit, inputTask.UnitID).Error; err != nil || inputTask.UnitID == 0 {
-				return errors.New("Выберите единицу измерения работы")
+			// --------- новый код chat: необязательные единица и объём работы; 0 означает отсутствие
+			if inputTask.UnitID != 0 {
+				var unit models.MeasurementUnit
+				if err := tx.First(&unit, inputTask.UnitID).Error; err != nil {
+					return errors.New("Выберите существующую единицу измерения работы")
+				}
 			}
-			quantity, err := ParseWorkQuantity(inputTask.Quantity, 2, false)
-			if err != nil {
-				return err
+			var quantity int64
+			if strings.TrimSpace(inputTask.Quantity) != "" {
+				var err error
+				quantity, err = ParseWorkQuantity(inputTask.Quantity, 2, false)
+				if err != nil {
+					return err
+				}
 			}
+			// --------- конец нового кода chat
 			hours, err := ParseWorkQuantity(inputTask.Hours, 2, true)
 			if err != nil {
 				return err
 			}
 			taskHours += hours
-			if taskHours > employeeHours {
-				return errors.New("Часы работ превышают сумму часов сотрудников")
-			}
 			task := models.WorkOrderTask{ShiftID: shift.ID, PositionID: inputTask.PositionID, Name: name, UnitID: inputTask.UnitID, QuantityHundredths: quantity, HoursHundredths: hours}
 			if err := tx.Create(&task).Error; err != nil {
 				return err
@@ -296,6 +301,11 @@ func SaveWorkShift(db *gorm.DB, agreementID, shiftID uint, input WorkShiftInput)
 		if taskHours < employeeHours {
 			warning = "По работам распределены не все часы сотрудников"
 		}
+		// --------- новый код chat: превышение — предупреждение, а не запрет сохранения
+		if taskHours > employeeHours {
+			warning = "Часы работ превышают сумму часов сотрудников"
+		}
+		// --------- конец нового кода chat
 		return nil
 	})
 	return shift, warning, err
