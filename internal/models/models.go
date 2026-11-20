@@ -9,6 +9,90 @@ type Response struct {
 	Message string `json:"message"`
 }
 
+// --------- новый код chat: книга наряд-заданий и склад; количества — целые сотые/тысячные
+type MeasurementUnit struct {
+	ID      uint   `gorm:"primaryKey" json:"ID"`
+	Name    string `json:"name"`
+	NameKey string `gorm:"uniqueIndex" json:"-"`
+}
+type AgreementWorkshop struct {
+	ID          uint   `gorm:"primaryKey" json:"ID"`
+	AgreementID uint   `gorm:"uniqueIndex:workshop_name" json:"agreement_id"`
+	Name        string `json:"name"`
+	NameKey     string `gorm:"uniqueIndex:workshop_name" json:"-"`
+}
+type AgreementWorkBlock struct {
+	ID          uint   `gorm:"primaryKey" json:"ID"`
+	AgreementID uint   `gorm:"index" json:"agreement_id"`
+	WorkshopID  uint   `gorm:"uniqueIndex:block_name" json:"workshop_id"`
+	Name        string `json:"name"`
+	NameKey     string `gorm:"uniqueIndex:block_name" json:"-"`
+}
+type AgreementWorkPosition struct {
+	ID          uint   `gorm:"primaryKey" json:"ID"`
+	AgreementID uint   `gorm:"index" json:"agreement_id"`
+	BlockID     uint   `gorm:"uniqueIndex:position_number" json:"block_id"`
+	Number      string `gorm:"uniqueIndex:position_number" json:"number"`
+	Name        string `json:"name"`
+}
+type WorkOrderBook struct {
+	ID          uint `gorm:"primaryKey" json:"ID"`
+	AgreementID uint `gorm:"uniqueIndex:work_book_month" json:"agreement_id"`
+	Year        int  `gorm:"uniqueIndex:work_book_month" json:"year"`
+	Month       int  `gorm:"uniqueIndex:work_book_month" json:"month"`
+}
+type WorkOrderDay struct {
+	ID     uint   `gorm:"primaryKey" json:"ID"`
+	BookID uint   `gorm:"uniqueIndex:work_book_day" json:"book_id"`
+	Date   string `gorm:"uniqueIndex:work_book_day;index" json:"date"`
+}
+type WorkOrderShift struct {
+	ID          uint  `gorm:"primaryKey" json:"ID"`
+	AgreementID uint  `gorm:"index" json:"agreement_id"`
+	DayID       uint  `gorm:"uniqueIndex:work_day_shift" json:"day_id"`
+	WorkshopID  uint  `gorm:"uniqueIndex:work_day_shift" json:"workshop_id"`
+	Number      int   `gorm:"uniqueIndex:work_day_shift" json:"number"`
+	Version     int64 `json:"version"`
+}
+type WorkOrderEmployee struct {
+	ID              uint   `gorm:"primaryKey" json:"ID"`
+	ShiftID         uint   `gorm:"uniqueIndex:work_shift_employee" json:"shift_id"`
+	EmployeeCardID  uint   `gorm:"uniqueIndex:work_shift_employee;index" json:"employee_card_id"`
+	EmployeeName    string `json:"employee_name"`
+	HoursHundredths int64  `json:"hours_hundredths"`
+}
+type WorkOrderTask struct {
+	ID                 uint   `gorm:"primaryKey" json:"ID"`
+	ShiftID            uint   `gorm:"index" json:"shift_id"`
+	PositionID         uint   `gorm:"index" json:"position_id"`
+	Name               string `json:"name"`
+	UnitID             uint   `json:"unit_id"`
+	QuantityHundredths int64  `json:"quantity_hundredths"`
+	HoursHundredths    int64  `json:"hours_hundredths"`
+}
+type WarehouseMaterial struct {
+	ID          uint   `gorm:"primaryKey" json:"ID"`
+	AgreementID uint   `gorm:"index" json:"agreement_id"`
+	WorkshopID  uint   `gorm:"uniqueIndex:warehouse_material_name" json:"workshop_id"`
+	Name        string `json:"name"`
+	NameKey     string `gorm:"uniqueIndex:warehouse_material_name" json:"-"`
+	UnitID      uint   `json:"unit_id"`
+}
+type WarehouseReceipt struct {
+	ID                  uint   `gorm:"primaryKey" json:"ID"`
+	MaterialID          uint   `gorm:"index" json:"material_id"`
+	Date                string `json:"date"`
+	QuantityThousandths int64  `json:"quantity_thousandths"`
+}
+type WorkOrderMaterial struct {
+	ID                  uint  `gorm:"primaryKey" json:"ID"`
+	TaskID              uint  `gorm:"index" json:"task_id"`
+	MaterialID          uint  `gorm:"index" json:"material_id"`
+	QuantityThousandths int64 `json:"quantity_thousandths"`
+}
+
+// --------- конец нового кода chat
+
 // --------- новый код chat: общий справочник специализаций
 type EmployeeSpecialization struct {
 	ID   uint   `gorm:"primaryKey" json:"ID"`

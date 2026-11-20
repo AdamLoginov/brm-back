@@ -22,6 +22,9 @@ func InitDB() {
 	}
 
 	DB.AutoMigrate(
+		&models.MeasurementUnit{}, &models.AgreementWorkshop{}, &models.AgreementWorkBlock{}, &models.AgreementWorkPosition{}, // новый код chat
+		&models.WorkOrderBook{}, &models.WorkOrderDay{}, &models.WorkOrderShift{}, &models.WorkOrderEmployee{}, &models.WorkOrderTask{}, // новый код chat
+		&models.WarehouseMaterial{}, &models.WarehouseReceipt{}, &models.WorkOrderMaterial{}, // новый код chat
 		&models.StoredFile{},                           // новый код chat: реестр файлов
 		&models.Notification{},                         // новый код chat: уведомления задач
 		&models.SalaryApprovalBatch{},                  // новый код chat: идемпотентное применение выбора

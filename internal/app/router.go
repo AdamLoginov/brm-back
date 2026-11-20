@@ -8,6 +8,29 @@ import (
 
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
+	// --------- новый код chat: книга нарядов, склад и справочники договора
+	for _, pattern := range []string{"GET /api/agreements/{id}/work-references", "POST /api/agreements/{id}/work-references/{kind}/create", "PATCH /api/agreements/{id}/work-references/{kind}/{referenceId}", "DELETE /api/agreements/{id}/work-references/{kind}/{referenceId}"} {
+		mux.HandleFunc(pattern, middleware.AuthMiddleware(handlers.WorkOrderReferenceHandler))
+	}
+	for _, pattern := range []string{"GET /api/agreements/{id}/work-orders", "GET /api/agreements/{id}/work-orders/books/{bookId}", "POST /api/agreements/{id}/work-orders/books/create"} {
+		mux.HandleFunc(pattern, middleware.AuthMiddleware(handlers.WorkOrderHandler))
+	}
+	for _, pattern := range []string{"POST /api/agreements/{id}/work-orders/shifts/create", "PATCH /api/agreements/{id}/work-orders/shifts/{shiftId}", "DELETE /api/agreements/{id}/work-orders/shifts/{shiftId}"} {
+		mux.HandleFunc(pattern, middleware.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+			r.SetPathValue("action", "shifts")
+			handlers.WorkOrderHandler(w, r)
+		}))
+	}
+	for _, pattern := range []string{"GET /api/agreements/{id}/warehouse", "POST /api/agreements/{id}/warehouse/create", "GET /api/agreements/{id}/warehouse/{materialId}/history", "PATCH /api/agreements/{id}/warehouse/{materialId}", "DELETE /api/agreements/{id}/warehouse/{materialId}"} {
+		mux.HandleFunc(pattern, middleware.AuthMiddleware(handlers.WarehouseHandler))
+	}
+	for _, pattern := range []string{"POST /api/agreements/{id}/warehouse/{materialId}/receipts/create", "PATCH /api/agreements/{id}/warehouse/{materialId}/receipts/{receiptId}", "DELETE /api/agreements/{id}/warehouse/{materialId}/receipts/{receiptId}"} {
+		mux.HandleFunc(pattern, middleware.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+			r.SetPathValue("action", "receipts")
+			handlers.WarehouseHandler(w, r)
+		}))
+	}
+	// --------- конец нового кода chat
 	// --------- новый код chat: контакты доступны только авторизованным пользователям
 	mux.HandleFunc("GET /api/agreements/{id}/contacts", middleware.AuthMiddleware(handlers.AgreementContactHandler))
 	mux.HandleFunc("POST /api/agreements/{id}/contacts/create", middleware.AuthMiddleware(handlers.AgreementContactHandler)) // новый код chat: без конфликта с изменением договора
