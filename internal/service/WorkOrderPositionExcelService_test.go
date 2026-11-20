@@ -46,7 +46,15 @@ func TestWorkPositionExcel(t *testing.T) {
 		t.Fatal(err)
 	}
 	found, unassigned := false, false
+	// новый код chat: первая строка — заголовки, итогов и цветных выделений нет.
+	if len(rows) == 0 || len(rows[0]) < 2 || rows[0][1] != "Наименование работы" {
+		t.Fatal("missing column headings", rows)
+	}
 	for index, row := range rows {
+		if len(row)>0 && strings.HasPrefix(row[0],"Позиция ") && row[0]!="Позиция № 1013 Объект / Блок / Цех 1" { t.Fatal("wrong section title",row[0]) } // новый код chat
+		if strings.Contains(strings.Join(row, " "), "Итого по позиции") {
+			t.Fatal("unexpected totals")
+		}
 		if len(row) > 0 && row[0] == "Без позиции" {
 			unassigned = true
 		}
@@ -64,8 +72,8 @@ func TestWorkPositionExcel(t *testing.T) {
 				t.Fatal(err)
 			}
 			style, err := opened.GetStyle(styleID)
-			if err != nil || style.Font == nil || style.Font.Color != "DC3545" {
-				t.Fatal("missing red marker", style, err)
+			if err != nil || style.Font == nil || style.Font.Color != "000000" || len(style.Border) != 4 {
+				t.Fatal("expected black text and borders", style, err)
 			}
 		}
 	}
