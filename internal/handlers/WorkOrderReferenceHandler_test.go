@@ -78,6 +78,19 @@ func TestWorkReferences(t *testing.T) {
 	if call("GET", "", a.ID, 0, "") != 200 {
 		t.Fatal("references load")
 	}
+	// --------- новый код chat: блок без позиций может быть напрямую указан в работе.
+	directBlock := models.AgreementWorkBlock{AgreementID: a.ID, WorkshopID: shop.ID, Name: "Самостоятельный", NameKey: "самостоятельный"}
+	db.Create(&directBlock)
+	db.Create(&models.WorkOrderTask{BlockID: directBlock.ID})
+	if call("DELETE", "blocks", a.ID, directBlock.ID, "") != 400 {
+		t.Fatal("directly used block deleted")
+	}
+	otherShop := models.AgreementWorkshop{AgreementID: a.ID, Name: "Второй цех", NameKey: "второй цех"}
+	db.Create(&otherShop)
+	if call("PATCH", "blocks", a.ID, directBlock.ID, `{"name":"Самостоятельный","workshop_id":`+strconv.Itoa(int(otherShop.ID))+`}`) != 400 {
+		t.Fatal("directly used block moved")
+	}
+	// --------- конец нового кода chat
 }
 
 // --------- конец нового кода chat

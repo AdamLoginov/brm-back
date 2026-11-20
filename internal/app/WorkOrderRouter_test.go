@@ -115,27 +115,25 @@ func TestWorkOrderRoutes(t *testing.T) {
 	if call("DELETE", fmt.Sprintf("/warehouse/%d", material.ID), "", true) != 204 {
 		t.Fatal("material delete route")
 	}
-	// --------- новый код chat: выгрузка, проверка и подтверждение требуют авторизации
+	// --------- новый код chat: проверка и подтверждение журнала требуют авторизации
 	excelPath := fmt.Sprintf("/work-orders/books/%d/excel", book.ID)
-	if call("GET", excelPath, "", false) != 401 || call("POST", excelPath+"/preview", "", false) != 401 {
+	if call("POST", excelPath+"/preview", "", false) != 401 {
 		t.Fatal("anonymous Excel access")
 	}
-	req := httptest.NewRequest("GET", base+excelPath+"?template=1", nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	response := httptest.NewRecorder()
-	router.ServeHTTP(response, req)
-	if response.Code != 200 || !strings.Contains(response.Header().Get("Content-Type"), "spreadsheetml") {
-		t.Fatal(response.Code, response.Body.String())
-	}
-	file, err := excelize.OpenReader(bytes.NewReader(response.Body.Bytes()))
-	if err != nil {
-		t.Fatal(err)
-	}
+	file := excelize.NewFile()
 	defer file.Close()
-	for i, v := range []string{"new:api", day.Date, fmt.Sprintf("%d | Цех", shop.ID), "1"} {
-		cell, _ := excelize.CoordinatesToCellName(i+1, 2)
-		if err := file.SetCellStr("Смены", cell, v); err != nil {
-			t.Fatal(err)
+	// новый код chat: единственный поддерживаемый формат — общий журнал.
+	rows := [][]string{
+		{"Дата", "Сотрудник", "Часы", "смена", "цех", "блок", "поз.", "Наменование", "ед изм", "кол-во", "чел-час", "Материалы", "ед. изм", "кол-во"},
+		{"Заголовок таблицы"}, // новый код chat: вторая строка не импортируется
+		{day.Date, "", "", "1", "Цех", "", "", "Работа", "", "", "", "", "", ""},
+	}
+	for row, values := range rows {
+		for col, value := range values {
+			cell, _ := excelize.CoordinatesToCellName(col+1, row+1)
+			if err := file.SetCellStr("Sheet1", cell, value); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	xlsx, err := file.WriteToBuffer()
@@ -150,7 +148,6 @@ func TestWorkOrderRoutes(t *testing.T) {
 			t.Fatal(err)
 		}
 		part.Write(xlsx.Bytes())
-		form.WriteField("options", `{"mode":"merge","replace_shifts":[],"replace_receipts":false}`)
 		form.WriteField("token", confirmation)
 		form.Close()
 		r := httptest.NewRequest("POST", base+excelPath+"/"+action, &body)
@@ -173,7 +170,7 @@ func TestWorkOrderRoutes(t *testing.T) {
 	preview := importCall("preview", "")
 	var count int64
 	db.Model(&models.WorkOrderShift{}).Count(&count)
-	if count != 0 || len(preview.Changes) != 1 || preview.Token == "" {
+	if count != 0 || len(preview.Changes) != 2 || preview.Token == "" {
 		t.Fatal("preview persisted or missing plan", preview, count)
 	}
 	confirmed := importCall("confirm", preview.Token)

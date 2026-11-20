@@ -34,6 +34,7 @@ type WorkMaterialInput struct {
 	Quantity   string `json:"quantity"`
 }
 type WorkTaskInput struct {
+	BlockID    uint                `json:"block_id"` // новый код chat: самостоятельный необязательный блок
 	PositionID uint                `json:"position_id"`
 	Name       string              `json:"name"`
 	UnitID     uint                `json:"unit_id"`
@@ -240,10 +241,25 @@ func SaveWorkShift(db *gorm.DB, agreementID, shiftID uint, input WorkShiftInput)
 			if name == "" || len(name) > 2000 {
 				return errors.New("Укажите наименование работы (до 2000 байт)")
 			}
-			var position models.AgreementWorkPosition
-			if err := tx.Joins("JOIN agreement_work_blocks b ON b.id = agreement_work_positions.block_id").Where("agreement_work_positions.id = ? AND agreement_work_positions.agreement_id = ? AND b.workshop_id = ?", inputTask.PositionID, agreementID, input.WorkshopID).First(&position).Error; err != nil {
-				return errors.New("Выберите позицию блока текущего цеха")
+			// --------- новый код chat: необязательные блок и позиция с проверкой их принадлежности
+			blockID := inputTask.BlockID
+			if inputTask.PositionID != 0 {
+				var position models.AgreementWorkPosition
+				if err := tx.Where("id = ? AND agreement_id = ?", inputTask.PositionID, agreementID).First(&position).Error; err != nil {
+					return errors.New("Выберите существующую позицию договора")
+				}
+				if blockID != 0 && blockID != position.BlockID {
+					return errors.New("Позиция не принадлежит выбранному блоку")
+				}
+				blockID = position.BlockID // Совместимость со старыми запросами, передающими только позицию.
 			}
+			if blockID != 0 {
+				var block models.AgreementWorkBlock
+				if err := tx.Where("id = ? AND agreement_id = ? AND workshop_id = ?", blockID, agreementID, input.WorkshopID).First(&block).Error; err != nil {
+					return errors.New("Выберите блок текущего цеха")
+				}
+			}
+			// --------- конец нового кода chat
 			// --------- новый код chat: необязательные единица и объём работы; 0 означает отсутствие
 			if inputTask.UnitID != 0 {
 				var unit models.MeasurementUnit
@@ -260,12 +276,18 @@ func SaveWorkShift(db *gorm.DB, agreementID, shiftID uint, input WorkShiftInput)
 				}
 			}
 			// --------- конец нового кода chat
-			hours, err := ParseWorkQuantity(inputTask.Hours, 2, true)
-			if err != nil {
-				return err
+			// новый код chat: пустые часы не участвуют в сумме, введённый ноль сохраняется как ноль.
+			hoursNotSpecified := strings.TrimSpace(inputTask.Hours) == ""
+			var hours int64
+			if !hoursNotSpecified {
+				var err error
+				hours, err = ParseWorkQuantity(inputTask.Hours, 2, true)
+				if err != nil {
+					return err
+				}
 			}
 			taskHours += hours
-			task := models.WorkOrderTask{ShiftID: shift.ID, PositionID: inputTask.PositionID, Name: name, UnitID: inputTask.UnitID, QuantityHundredths: quantity, HoursHundredths: hours}
+			task := models.WorkOrderTask{ShiftID: shift.ID, BlockID: blockID, PositionID: inputTask.PositionID, Name: name, UnitID: inputTask.UnitID, QuantityHundredths: quantity, HoursHundredths: hours, HoursNotSpecified: hoursNotSpecified} // новый код chat
 			if err := tx.Create(&task).Error; err != nil {
 				return err
 			}

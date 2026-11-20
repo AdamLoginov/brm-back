@@ -17,11 +17,6 @@ import (
 	"project/internal/models"
 )
 
-type WorkImportOptions struct {
-	Mode            string `json:"mode"`
-	ReplaceShifts   []uint `json:"replace_shifts"`
-	ReplaceReceipts bool   `json:"replace_receipts"`
-}
 type WorkImportChange struct {
 	Sheet   string   `json:"sheet"`
 	Context string   `json:"context"`
@@ -54,12 +49,10 @@ var workImportSigningKey = func() []byte {
 }()
 var workImportPreviewRollback = errors.New("work import preview rollback")
 
-func workImportToken(s workExcelState, data []byte, options WorkImportOptions) string {
+func workImportToken(s workExcelState, data []byte) string {
 	h := hmac.New(sha256.New, workImportSigningKey)
 	h.Write([]byte(workExcelFingerprint(s)))
 	h.Write(data)
-	raw, _ := json.Marshal(options)
-	h.Write(raw)
 	return hex.EncodeToString(h.Sum(nil))
 }
 func workTableMap(rows [][]string) map[string][]string {
@@ -74,7 +67,14 @@ func workMapRows(rows map[string][]string) [][]string {
 	for k := range rows {
 		keys = append(keys, k)
 	}
-	sort.Strings(keys)
+	// новый код chat: числовые ключи идут 2, 3, 10, а не 10, 2, 3 — порядок работ стабилен после импорта.
+	sort.Slice(keys, func(i, j int) bool {
+		a, b := workUint(keys[i]), workUint(keys[j])
+		if a != 0 && b != 0 {
+			return a < b
+		}
+		return keys[i] < keys[j]
+	})
 	result := [][]string{}
 	for _, k := range keys {
 		result = append(result, rows[k])
@@ -84,19 +84,13 @@ func workMapRows(rows map[string][]string) [][]string {
 func workRowEqual(a, b []string) bool { return strings.Join(a, "\x00") == strings.Join(b, "\x00") }
 func workUint(s string) uint          { n, _ := strconv.ParseUint(s, 10, 32); return uint(n) }
 
-func mergeWorkExcel(s workExcelState, incoming workExcelTables, options WorkImportOptions) (workExcelTables, []string) {
+func mergeWorkExcel(s workExcelState, incoming workExcelTables, replaceShifts []uint) (workExcelTables, []string) {
 	var final workExcelTables
 	problems := []string{}
-	if options.Mode != "merge" && options.Mode != "replace" {
-		return final, []string{"Неизвестный режим импорта"}
-	}
-	if options.Mode == "merge" && (len(options.ReplaceShifts) > 0 || options.ReplaceReceipts) {
-		return final, []string{"Удаление разрешено только в режиме замены"}
-	}
 	oldShifts := workTableMap(s.Tables[0])
 	oldTasks := workTableMap(s.Tables[2])
 	selected := map[string]bool{}
-	for _, id := range options.ReplaceShifts {
+	for _, id := range replaceShifts {
 		k := workKey(id)
 		if oldShifts[k] == nil {
 			problems = append(problems, "Выбрана смена другого месяца или договора")
@@ -119,8 +113,6 @@ func mergeWorkExcel(s workExcelState, incoming workExcelTables, options WorkImpo
 					immutable = []int{1, 2, 3}
 				case 1, 2, 3:
 					immutable = []int{1}
-				case 4:
-					immutable = []int{2}
 				}
 				for _, c := range immutable {
 					if r[c] != previous[c] {
@@ -130,7 +122,7 @@ func mergeWorkExcel(s workExcelState, incoming workExcelTables, options WorkImpo
 			}
 			next[r[0]] = r
 		}
-		if options.Mode == "replace" {
+		{ // новый код chat: заменяем только смены, представленные в журнале
 			for k, r := range old {
 				remove := false
 				switch ti {
@@ -142,8 +134,6 @@ func mergeWorkExcel(s workExcelState, incoming workExcelTables, options WorkImpo
 					if task := oldTasks[r[1]]; task != nil {
 						remove = selected[task[1]]
 					}
-				case 4:
-					remove = options.ReplaceReceipts
 				}
 				if remove && file[k] == nil {
 					delete(next, k)
@@ -210,9 +200,6 @@ func workExcelChanges(s workExcelState, final workExcelTables) []WorkImportChang
 }
 
 func workExcelRowContext(s workExcelState, tables workExcelTables, ti int, row []string) string {
-	if ti == 4 {
-		return row[1]
-	}
 	shiftKey := row[0]
 	workName := ""
 	if ti == 1 || ti == 2 {
@@ -287,31 +274,6 @@ func applyWorkExcel(tx *gorm.DB, s workExcelState, final workExcelTables, report
 			}
 		}
 	}
-	// Поступления меняются вместе со списаниями; итоговый остаток проверяется после всего пакета.
-	oldReceipts, newReceipts := workTableMap(s.Tables[4]), workTableMap(final[4])
-	for k := range oldReceipts {
-		if newReceipts[k] == nil {
-			if err := tx.Delete(&models.WarehouseReceipt{}, workUint(k)).Error; err != nil {
-				return err
-			}
-		}
-	}
-	for _, r := range final[4] {
-		if workRowEqual(oldReceipts[r[0]], r) {
-			continue
-		}
-		quantity, err := ParseWorkQuantity(r[3], 3, false)
-		if err != nil {
-			return err
-		}
-		row := models.WarehouseReceipt{MaterialID: workUint(r[2]), Date: r[1], QuantityThousandths: quantity}
-		if oldReceipts[r[0]] != nil {
-			row.ID = workUint(r[0])
-		}
-		if err := tx.Save(&row).Error; err != nil {
-			return err
-		}
-	}
 	shiftDetails := map[string]WorkShiftDetail{}
 	for _, r := range s.Book.Shifts {
 		shiftDetails[workKey(r.ID)] = r
@@ -339,11 +301,8 @@ func applyWorkExcel(tx *gorm.DB, s workExcelState, final workExcelTables, report
 			input.Employees = append(input.Employees, WorkEmployeeInput{EmployeeCardID: workUint(e[2]), Hours: e[3]})
 		}
 		for _, t := range rows[2] {
-			var position models.AgreementWorkPosition
-			if err := tx.Where("id = ? AND block_id = ? AND agreement_id = ?", workUint(t[7]), workUint(t[6]), s.Book.AgreementID).First(&position).Error; err != nil {
-				return fmt.Errorf("Работы, ключ %s: позиция не принадлежит выбранному блоку", t[0])
-			}
-			task := WorkTaskInput{Name: t[2], UnitID: workUint(t[3]), Quantity: t[4], Hours: t[5], PositionID: workUint(t[7])}
+			// новый код chat: единая проверка необязательных блока и позиции в SaveWorkShift.
+			task := WorkTaskInput{Name: t[2], UnitID: workUint(t[3]), Quantity: t[4], Hours: t[5], BlockID: workUint(t[6]), PositionID: workUint(t[7])}
 			for _, m := range rows[3] {
 				if m[1] == t[0] {
 					task.Materials = append(task.Materials, WorkMaterialInput{MaterialID: workUint(m[2]), Quantity: m[3]})
@@ -379,26 +338,28 @@ func applyWorkExcel(tx *gorm.DB, s workExcelState, final workExcelTables, report
 }
 
 // preview и commit используют одни и те же проверки. Preview всегда откатывает транзакцию.
-// Подпись связывает подтверждение с файлом, настройками и состоянием базы; подменить план нельзя.
-func ImportWorkOrderExcel(db *gorm.DB, agreementID, bookID uint, data []byte, options WorkImportOptions, token string, commit bool) (WorkImportReport, error) {
+// Подпись связывает подтверждение с файлом и состоянием базы; подменить план нельзя.
+func ImportWorkOrderExcel(db *gorm.DB, agreementID, bookID uint, data []byte, token string, commit bool) (WorkImportReport, error) { // новый код chat: импорт только общего журнала
 	report := WorkImportReport{Changes: []WorkImportChange{}, Warnings: []string{}, Errors: []string{}, Stock: []WorkImportStock{}}
 	err := WorkTransaction(db, agreementID, func(tx *gorm.DB) error {
 		s, err := loadWorkExcelState(tx, agreementID, bookID)
 		if err != nil {
 			return err
 		}
-		incoming, problems := parseWorkOrderExcel(data, s)
+		// --------- новый код chat: журнал заменяет только представленные смены, без поступлений склада
+		incoming, selected, problems := parseWorkOrderJournal(tx, data, s)
+		// --------- конец нового кода chat
 		if len(problems) > 0 {
 			report.Errors = problems
 			return workImportPreviewRollback
 		}
-		final, problems := mergeWorkExcel(s, incoming, options)
+		final, problems := mergeWorkExcel(s, incoming, selected)
 		if len(problems) > 0 {
 			report.Errors = problems
 			return workImportPreviewRollback
 		}
 		report.Changes = workExcelChanges(s, final)
-		expected := workImportToken(s, data, options)
+		expected := workImportToken(s, data)
 		if commit && !hmac.Equal([]byte(token), []byte(expected)) {
 			return errors.New("Запись изменена или проверка не выполнена. Повторите предварительную проверку файла")
 		}

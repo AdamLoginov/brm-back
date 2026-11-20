@@ -167,6 +167,9 @@ func WorkOrderReferenceHandler(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if remove {
+				if err := used(&models.WorkOrderTask{}, "block_id = ?", id); err != nil {
+					return err
+				} // новый код chat: блок может использоваться напрямую
 				if err := used(&models.AgreementWorkPosition{}, "block_id = ?", id); err != nil {
 					return err
 				}
@@ -180,6 +183,9 @@ func WorkOrderReferenceHandler(w http.ResponseWriter, r *http.Request) {
 				return err
 			}
 			if id != 0 && row.WorkshopID != input.WorkshopID {
+				if err := used(&models.WorkOrderTask{}, "block_id = ?", id); err != nil {
+					return err
+				} // новый код chat
 				if err := used(&models.AgreementWorkPosition{}, "block_id = ?", id); err != nil {
 					return err
 				}

@@ -9,7 +9,6 @@ import (
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
 	// --------- новый код chat: Excel доступен с той же авторизацией, что и книга
-	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/excel", middleware.AuthMiddleware(handlers.WorkOrderExcelHandler))
 	mux.HandleFunc("POST /api/agreements/{id}/work-orders/books/{bookId}/excel/{excelAction}", middleware.AuthMiddleware(handlers.WorkOrderExcelHandler))
 	// --------- конец нового кода chat
 	// --------- новый код chat: книга нарядов, склад и справочники договора

@@ -62,7 +62,7 @@ func LoadWarehouse(db *gorm.DB, agreementID uint) ([]WarehouseRow, error) {
 func WarehouseUsages(db *gorm.DB, materialID uint) ([]WarehouseUsage, error) {
 	rows := []WarehouseUsage{}
 	err := db.Model(&models.WorkOrderMaterial{}).Select("work_order_materials.*, t.name AS task_name, t.shift_id, d.book_id, d.date, s.number, p.number AS position_number, p.name AS position_name, b.name AS block_name").
-		Joins("JOIN work_order_tasks t ON t.id = work_order_materials.task_id JOIN work_order_shifts s ON s.id = t.shift_id JOIN work_order_days d ON d.id = s.day_id JOIN agreement_work_positions p ON p.id = t.position_id JOIN agreement_work_blocks b ON b.id = p.block_id").
+		Joins("JOIN work_order_tasks t ON t.id = work_order_materials.task_id JOIN work_order_shifts s ON s.id = t.shift_id JOIN work_order_days d ON d.id = s.day_id LEFT JOIN agreement_work_positions p ON p.id = t.position_id LEFT JOIN agreement_work_blocks b ON b.id = COALESCE(NULLIF(t.block_id, 0), p.block_id)"). // новый код chat: история включает работы без позиции и блока
 		Where("material_id = ?", materialID).Order("d.date, s.number, work_order_materials.id").Scan(&rows).Error
 	return rows, err
 }

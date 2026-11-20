@@ -64,6 +64,8 @@ type WorkOrderEmployee struct {
 type WorkOrderTask struct {
 	ID                 uint   `gorm:"primaryKey" json:"ID"`
 	ShiftID            uint   `gorm:"index" json:"shift_id"`
+	BlockID            uint   `gorm:"index;not null;default:0" json:"block_id"`          // новый код chat: блок сохраняется и без позиции
+	HoursNotSpecified  bool   `gorm:"not null;default:false" json:"hours_not_specified"` // новый код chat: отличаем пустые часы от введённого нуля
 	PositionID         uint   `gorm:"index" json:"position_id"`
 	Name               string `json:"name"`
 	UnitID             uint   `json:"unit_id"`
