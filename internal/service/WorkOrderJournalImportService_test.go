@@ -58,6 +58,31 @@ func TestWorkJournalRejectsStaleConfirmation(t *testing.T) {
 	}
 }
 
+// новый код chat: повторный импорт не снимает сохранённую отметку.
+func TestWorkJournalPreservesAccounted(t *testing.T) {
+	f := newWorkFixture(t)
+	file := journalFixtureFile(t, f)
+	data := excelBytes(t, file)
+	report := previewExcel(t, f, data)
+	confirmExcel(t, f, data, report.Token)
+	book, err := LoadWorkBook(f.db, f.a.ID, f.book.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := book.Shifts[0].Tasks[0]
+	if err := f.db.Model(&models.WorkOrderTask{}).Where("id = ?", task.ID).Update("accounted", true).Error; err != nil {
+		t.Fatal(err)
+	}
+	excelCell(t, file, "Sheet1", "J3", "4")
+	data = excelBytes(t, file)
+	report = previewExcel(t, f, data)
+	confirmExcel(t, f, data, report.Token)
+	book, err = LoadWorkBook(f.db, f.a.ID, f.book.ID)
+	if err != nil || !book.Shifts[0].Tasks[0].Accounted || book.Shifts[0].Tasks[0].QuantityHundredths != 400 {
+		t.Fatal("accounted flag lost", err, book)
+	}
+}
+
 func TestWorkJournalImportLifecycle(t *testing.T) {
 	f := newWorkFixture(t)
 	file := journalFixtureFile(t, f)

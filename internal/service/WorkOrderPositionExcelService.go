@@ -12,6 +12,7 @@ import (
 )
 
 type positionExcelGroup struct {
+	accounted       bool // новый код chat
 	name, unit      string
 	count           int
 	quantity, hours int64
@@ -46,9 +47,12 @@ func BuildWorkOrderPositionExcel(db *gorm.DB, agreementID, bookID uint) (*exceli
 				sections[position] = map[string]*positionExcelGroup{}
 			}
 			key := fmt.Sprintf("%s\x00%d", strings.ToLower(strings.Join(strings.Fields(task.Name), " ")), task.UnitID)
+			if task.Accounted {
+				key = fmt.Sprintf("accounted:%d", task.ID)
+			} // новый код chat: индивидуальная строка
 			group := sections[position][key]
 			if group == nil {
-				group = &positionExcelGroup{name: task.Name, unit: workKey(task.UnitID), materials: map[string]int64{}}
+				group = &positionExcelGroup{accounted: task.Accounted, name: task.Name, unit: workKey(task.UnitID), materials: map[string]int64{}} // новый код chat
 				sections[position][key] = group
 			}
 			group.count++
@@ -97,6 +101,9 @@ func BuildWorkOrderPositionExcel(db *gorm.DB, agreementID, bookID uint) (*exceli
 	sectionStyle := header
 	format := "#,##0.00"
 	number := style(&excelize.Style{Border: borders, CustomNumFmt: &format, Font: &excelize.Font{Size: 11, Color: "000000"}, Alignment: &excelize.Alignment{Vertical: "top"}})
+	// новый код chat: только учтённые работы выделены бледно-красным.
+	accountedStyle := style(&excelize.Style{Border: borders, Font: &excelize.Font{Size: 11, Color: "000000"}, Fill: excelize.Fill{Type: "pattern", Color: []string{"FCE8E8"}, Pattern: 1}, Alignment: &excelize.Alignment{Vertical: "top", WrapText: true}})
+	accountedNumber := style(&excelize.Style{Border: borders, CustomNumFmt: &format, Font: &excelize.Font{Size: 11, Color: "000000"}, Fill: excelize.Fill{Type: "pattern", Color: []string{"FCE8E8"}, Pattern: 1}, Alignment: &excelize.Alignment{Vertical: "top"}})
 	write := func(row int, values []interface{}) { check(f.SetSheetRow(sheet, fmt.Sprintf("A%d", row), &values)) }
 	merge := func(row int, text string, format int) {
 		write(row, []interface{}{text})
@@ -127,15 +134,24 @@ func BuildWorkOrderPositionExcel(db *gorm.DB, agreementID, bookID uint) (*exceli
 		for key := range groups {
 			names = append(names, key)
 		}
-		sort.Strings(names)
+		sort.Slice(names, func(i, j int) bool {
+			if groups[names[i]].accounted != groups[names[j]].accounted {
+				return !groups[names[i]].accounted
+			}
+			return names[i] < names[j]
+		}) // новый код chat
 		for index, key := range names {
 			group := groups[key]
 			text := materialText(group.materials)
 			write(row, []interface{}{index + 1, group.name, group.count, float64(group.quantity) / 100, label("units", group.unit), float64(group.hours) / 100, text})
-			check(f.SetCellStyle(sheet, fmt.Sprintf("A%d", row), fmt.Sprintf("G%d", row), base))
+			rowStyle, numberStyle := base, number
+			if group.accounted {
+				rowStyle, numberStyle = accountedStyle, accountedNumber
+			} // новый код chat
+			check(f.SetCellStyle(sheet, fmt.Sprintf("A%d", row), fmt.Sprintf("G%d", row), rowStyle))
 			for _, column := range []string{"D", "F"} {
 				address := fmt.Sprintf("%s%d", column, row)
-				check(f.SetCellStyle(sheet, address, address, number))
+				check(f.SetCellStyle(sheet, address, address, numberStyle)) // новый код chat
 			}
 			lines := len([]rune(group.name))/48 + 1
 			materialLines := 0

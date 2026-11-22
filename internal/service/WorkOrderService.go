@@ -34,7 +34,8 @@ type WorkMaterialInput struct {
 	Quantity   string `json:"quantity"`
 }
 type WorkTaskInput struct {
-	BlockID    uint                `json:"block_id"` // новый код chat: самостоятельный необязательный блок
+	Accounted  bool                `json:"accounted"` // новый код chat
+	BlockID    uint                `json:"block_id"`  // новый код chat: самостоятельный необязательный блок
 	PositionID uint                `json:"position_id"`
 	Name       string              `json:"name"`
 	UnitID     uint                `json:"unit_id"`
@@ -237,88 +238,11 @@ func SaveWorkShift(db *gorm.DB, agreementID, shiftID uint, input WorkShiftInput)
 		}
 		var taskHours int64
 		for _, inputTask := range input.Tasks {
-			name := strings.TrimSpace(inputTask.Name)
-			if name == "" || len(name) > 2000 {
-				return errors.New("Укажите наименование работы (до 2000 байт)")
-			}
-			// --------- новый код chat: необязательные блок и позиция с проверкой их принадлежности
-			blockID := inputTask.BlockID
-			if inputTask.PositionID != 0 {
-				var position models.AgreementWorkPosition
-				if err := tx.Where("id = ? AND agreement_id = ?", inputTask.PositionID, agreementID).First(&position).Error; err != nil {
-					return errors.New("Выберите существующую позицию договора")
-				}
-				if blockID != 0 && blockID != position.BlockID {
-					return errors.New("Позиция не принадлежит выбранному блоку")
-				}
-				blockID = position.BlockID // Совместимость со старыми запросами, передающими только позицию.
-			}
-			if blockID != 0 {
-				var block models.AgreementWorkBlock
-				if err := tx.Where("id = ? AND agreement_id = ? AND workshop_id = ?", blockID, agreementID, input.WorkshopID).First(&block).Error; err != nil {
-					return errors.New("Выберите блок текущего цеха")
-				}
-			}
-			// --------- конец нового кода chat
-			// --------- новый код chat: необязательные единица и объём работы; 0 означает отсутствие
-			if inputTask.UnitID != 0 {
-				var unit models.MeasurementUnit
-				if err := tx.First(&unit, inputTask.UnitID).Error; err != nil {
-					return errors.New("Выберите существующую единицу измерения работы")
-				}
-			}
-			var quantity int64
-			if strings.TrimSpace(inputTask.Quantity) != "" {
-				var err error
-				quantity, err = ParseWorkQuantity(inputTask.Quantity, 2, false)
-				if err != nil {
-					return err
-				}
-			}
-			// --------- конец нового кода chat
-			// новый код chat: пустые часы не участвуют в сумме, введённый ноль сохраняется как ноль.
-			hoursNotSpecified := strings.TrimSpace(inputTask.Hours) == ""
-			var hours int64
-			if !hoursNotSpecified {
-				var err error
-				hours, err = ParseWorkQuantity(inputTask.Hours, 2, true)
-				if err != nil {
-					return err
-				}
-			}
-			taskHours += hours
-			task := models.WorkOrderTask{ShiftID: shift.ID, BlockID: blockID, PositionID: inputTask.PositionID, Name: name, UnitID: inputTask.UnitID, QuantityHundredths: quantity, HoursHundredths: hours, HoursNotSpecified: hoursNotSpecified} // новый код chat
-			if err := tx.Create(&task).Error; err != nil {
+			task, err := saveWorkTask(tx, agreementID, shift, 0, inputTask)
+			if err != nil {
 				return err
 			}
-			if len(inputTask.Materials) > 1000 {
-				return errors.New("Слишком много материалов")
-			}
-			seen := map[uint]bool{}
-			for _, m := range inputTask.Materials {
-				if seen[m.MaterialID] {
-					return errors.New("Материал повторяется в работе")
-				}
-				seen[m.MaterialID] = true
-				var material models.WarehouseMaterial
-				if err := tx.Where("id = ? AND agreement_id = ? AND workshop_id = ?", m.MaterialID, agreementID, input.WorkshopID).First(&material).Error; err != nil {
-					return errors.New("Материал не принадлежит выбранному цеху")
-				}
-				amount, err := ParseWorkQuantity(m.Quantity, 3, false)
-				if err != nil {
-					return err
-				}
-				balance, err := WarehouseBalance(tx, m.MaterialID)
-				if err != nil {
-					return err
-				}
-				if amount > balance {
-					return fmt.Errorf("Недостаточно материала «%s» на складе цеха", material.Name)
-				}
-				if err := tx.Create(&models.WorkOrderMaterial{TaskID: task.ID, MaterialID: m.MaterialID, QuantityThousandths: amount}).Error; err != nil {
-					return err
-				}
-			}
+			taskHours += task.HoursHundredths
 		}
 		if taskHours < employeeHours {
 			warning = "По работам распределены не все часы сотрудников"
@@ -347,6 +271,139 @@ func DeleteWorkShift(db *gorm.DB, agreementID, shiftID uint, version int64) erro
 		}
 		return tx.Delete(&shift).Error
 	})
+}
+
+// --------- конец нового кода chat
+
+// --------- новый код chat: общая проверка работы для формы смены и отдельного редактирования
+func saveWorkTask(tx *gorm.DB, agreementID uint, shift models.WorkOrderShift, taskID uint, inputTask WorkTaskInput) (models.WorkOrderTask, error) {
+	name := strings.TrimSpace(inputTask.Name)
+	if name == "" || len(name) > 2000 {
+		return models.WorkOrderTask{}, errors.New("Укажите наименование работы (до 2000 байт)")
+	}
+	// --------- новый код chat: необязательные блок и позиция с проверкой их принадлежности
+	blockID := inputTask.BlockID
+	if inputTask.PositionID != 0 {
+		var position models.AgreementWorkPosition
+		if err := tx.Where("id = ? AND agreement_id = ?", inputTask.PositionID, agreementID).First(&position).Error; err != nil {
+			return models.WorkOrderTask{}, errors.New("Выберите существующую позицию договора")
+		}
+		if blockID != 0 && blockID != position.BlockID {
+			return models.WorkOrderTask{}, errors.New("Позиция не принадлежит выбранному блоку")
+		}
+		blockID = position.BlockID // Совместимость со старыми запросами, передающими только позицию.
+	}
+	if blockID != 0 {
+		var block models.AgreementWorkBlock
+		if err := tx.Where("id = ? AND agreement_id = ? AND workshop_id = ?", blockID, agreementID, shift.WorkshopID).First(&block).Error; err != nil {
+			return models.WorkOrderTask{}, errors.New("Выберите блок текущего цеха")
+		}
+	}
+	// --------- конец нового кода chat
+	// --------- новый код chat: необязательные единица и объём работы; 0 означает отсутствие
+	if inputTask.UnitID != 0 {
+		var unit models.MeasurementUnit
+		if err := tx.First(&unit, inputTask.UnitID).Error; err != nil {
+			return models.WorkOrderTask{}, errors.New("Выберите существующую единицу измерения работы")
+		}
+	}
+	var quantity int64
+	if strings.TrimSpace(inputTask.Quantity) != "" {
+		var err error
+		quantity, err = ParseWorkQuantity(inputTask.Quantity, 2, false)
+		if err != nil {
+			return models.WorkOrderTask{}, err
+		}
+	}
+	// --------- конец нового кода chat
+	// новый код chat: пустые часы не участвуют в сумме, введённый ноль сохраняется как ноль.
+	hoursNotSpecified := strings.TrimSpace(inputTask.Hours) == ""
+	var hours int64
+	if !hoursNotSpecified {
+		var err error
+		hours, err = ParseWorkQuantity(inputTask.Hours, 2, true)
+		if err != nil {
+			return models.WorkOrderTask{}, err
+		}
+	}
+	task := models.WorkOrderTask{Accounted: inputTask.Accounted, ShiftID: shift.ID, BlockID: blockID, PositionID: inputTask.PositionID, Name: name, UnitID: inputTask.UnitID, QuantityHundredths: quantity, HoursHundredths: hours, HoursNotSpecified: hoursNotSpecified} // новый код chat
+	task.ID = taskID                                                                                                                                                                                                                                                      // новый код chat: сохраняем ID при изменении отдельной работы
+	if err := tx.Save(&task).Error; err != nil {
+		return models.WorkOrderTask{}, err
+	}
+	if len(inputTask.Materials) > 1000 {
+		return models.WorkOrderTask{}, errors.New("Слишком много материалов")
+	}
+	seen := map[uint]bool{}
+	for _, m := range inputTask.Materials {
+		if seen[m.MaterialID] {
+			return models.WorkOrderTask{}, errors.New("Материал повторяется в работе")
+		}
+		seen[m.MaterialID] = true
+		var material models.WarehouseMaterial
+		if err := tx.Where("id = ? AND agreement_id = ? AND workshop_id = ?", m.MaterialID, agreementID, shift.WorkshopID).First(&material).Error; err != nil {
+			return models.WorkOrderTask{}, errors.New("Материал не принадлежит выбранному цеху")
+		}
+		amount, err := ParseWorkQuantity(m.Quantity, 3, false)
+		if err != nil {
+			return models.WorkOrderTask{}, err
+		}
+		balance, err := WarehouseBalance(tx, m.MaterialID)
+		if err != nil {
+			return models.WorkOrderTask{}, err
+		}
+		if amount > balance {
+			return models.WorkOrderTask{}, fmt.Errorf("Недостаточно материала «%s» на складе цеха", material.Name)
+		}
+		if err := tx.Create(&models.WorkOrderMaterial{TaskID: task.ID, MaterialID: m.MaterialID, QuantityThousandths: amount}).Error; err != nil {
+			return models.WorkOrderTask{}, err
+		}
+	}
+
+	return task, nil
+}
+
+// UpdateWorkTask меняет только одну работу; версия защищает также открытые формы смены.
+func UpdateWorkTask(db *gorm.DB, agreementID, taskID uint, version int64, input *WorkTaskInput, accounted *bool) (WorkTaskDetail, int64, error) {
+	var result WorkTaskDetail
+	var nextVersion int64
+	err := WorkTransaction(db, agreementID, func(tx *gorm.DB) error {
+		var task models.WorkOrderTask
+		if err := tx.First(&task, taskID).Error; err != nil {
+			return err
+		}
+		var shift models.WorkOrderShift
+		if err := tx.Where("id = ? AND agreement_id = ?", task.ShiftID, agreementID).First(&shift).Error; err != nil {
+			return err
+		}
+		if shift.Version != version {
+			return errors.New("Запись изменена другим действием. Обновите книгу и повторите")
+		}
+		if input != nil {
+			if err := tx.Where("task_id = ?", task.ID).Delete(&models.WorkOrderMaterial{}).Error; err != nil {
+				return err
+			}
+			var err error
+			task, err = saveWorkTask(tx, agreementID, shift, task.ID, *input)
+			if err != nil {
+				return err
+			}
+		} else if accounted != nil {
+			task.Accounted = *accounted
+			if err := tx.Model(&task).Update("accounted", *accounted).Error; err != nil {
+				return err
+			}
+		} else {
+			return errors.New("Не переданы изменения работы")
+		}
+		nextVersion = shift.Version + 1
+		if err := tx.Model(&shift).Update("version", nextVersion).Error; err != nil {
+			return err
+		}
+		result = WorkTaskDetail{WorkOrderTask: task, Materials: []models.WorkOrderMaterial{}}
+		return tx.Where("task_id = ?", task.ID).Order("id").Find(&result.Materials).Error
+	})
+	return result, nextVersion, err
 }
 
 // --------- конец нового кода chat

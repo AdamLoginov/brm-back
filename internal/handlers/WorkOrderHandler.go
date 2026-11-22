@@ -14,6 +14,24 @@ func WorkOrderHandler(w http.ResponseWriter, r *http.Request) {
 	if a == 0 {
 		return
 	}
+	// новый код chat: адресное изменение работы без пересоздания смены
+	if r.PathValue("taskId") != "" {
+		var input struct {
+			Version   int64                  `json:"version"`
+			Task      *service.WorkTaskInput `json:"task"`
+			Accounted *bool                  `json:"accounted"`
+		}
+		if !workDecode(w, r, &input) {
+			return
+		}
+		task, version, err := service.UpdateWorkTask(database.DB, a, workID(r, "taskId"), input.Version, input.Task, input.Accounted)
+		if err != nil {
+			workError(w, err)
+			return
+		}
+		workJSON(w, map[string]interface{}{"task": task, "version": version})
+		return
+	}
 	if r.PathValue("action") == "shifts" {
 		id := workID(r, "shiftId")
 		if (r.Method == "PATCH" || r.Method == "DELETE") && id == 0 {

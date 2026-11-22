@@ -61,6 +61,66 @@ func newWorkFixture(t *testing.T) workFixture {
 func (f workFixture) input() WorkShiftInput {
 	return WorkShiftInput{DayID: f.day.ID, WorkshopID: f.shop.ID, Number: 1, Employees: []WorkEmployeeInput{{EmployeeCardID: f.employee.ID, Hours: "12"}}, Tasks: []WorkTaskInput{{PositionID: f.position.ID, Name: "Монтаж", UnitID: f.unit.ID, Quantity: "2.5", Hours: "12", Materials: []WorkMaterialInput{{MaterialID: f.material.ID, Quantity: "80.125"}}}}}
 }
+
+// новый код chat: точечное изменение, конфликт версии и атомарность склада.
+func TestUpdateSingleWorkTask(t *testing.T) {
+	f := newWorkFixture(t)
+	in := f.input()
+	in.Tasks[0].Materials[0].Quantity = "10"
+	other := in.Tasks[0]
+	other.Name = "Другая работа"
+	other.Materials = nil
+	in.Tasks = append(in.Tasks, other)
+	shift, _, err := SaveWorkShift(f.db, f.a.ID, 0, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, _ := LoadWorkBook(f.db, f.a.ID, f.book.ID)
+	first := book.Shifts[0].Tasks[0]
+	second := book.Shifts[0].Tasks[1]
+	employee := book.Shifts[0].Employees[0]
+	flag := true
+	result, version, err := UpdateWorkTask(f.db, f.a.ID, first.ID, shift.Version, nil, &flag)
+	if err != nil || !result.Accounted || version != shift.Version+1 {
+		t.Fatal(result, version, err)
+	}
+	if _, _, err := UpdateWorkTask(f.db, f.a.ID, first.ID, shift.Version, nil, &flag); err == nil {
+		t.Fatal("stale update accepted")
+	}
+	if _, _, err := UpdateWorkTask(f.db, f.a.ID+999, first.ID, version, nil, &flag); err == nil {
+		t.Fatal("foreign agreement accepted")
+	}
+	edit := in.Tasks[0]
+	edit.Accounted = true
+	edit.Name = "Исправлено"
+	edit.Materials = []WorkMaterialInput{{MaterialID: f.material.ID, Quantity: "200"}}
+	if _, _, err := UpdateWorkTask(f.db, f.a.ID, first.ID, version, &edit, nil); err == nil {
+		t.Fatal("overdraw accepted")
+	}
+	balance, _ := WarehouseBalance(f.db, f.material.ID)
+	if balance != 90125 {
+		t.Fatal("rollback failed", balance)
+	}
+	edit.Materials[0].Quantity = "5"
+	result, next, err := UpdateWorkTask(f.db, f.a.ID, first.ID, version, &edit, nil)
+	if err != nil || result.ID != first.ID || result.Name != "Исправлено" || next != version+1 {
+		t.Fatal(result, next, err)
+	}
+	book, _ = LoadWorkBook(f.db, f.a.ID, f.book.ID)
+	if book.Shifts[0].Tasks[1].ID != second.ID || book.Shifts[0].Employees[0].ID != employee.ID {
+		t.Fatal("unrelated rows recreated")
+	}
+	balance, _ = WarehouseBalance(f.db, f.material.ID)
+	if balance != 95125 {
+		t.Fatal("wrong stock", balance)
+	}
+	flag = false
+	result, _, err = UpdateWorkTask(f.db, f.a.ID, first.ID, next, nil, &flag)
+	if err != nil || result.Accounted {
+		t.Fatal("cannot clear flag", err)
+	}
+}
+
 func TestWorkShiftLifecycle(t *testing.T) {
 	f := newWorkFixture(t)
 	book, err := LoadWorkBook(f.db, f.a.ID, f.book.ID)

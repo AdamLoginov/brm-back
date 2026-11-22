@@ -62,6 +62,7 @@ type WorkOrderEmployee struct {
 	HoursHundredths int64  `json:"hours_hundredths"`
 }
 type WorkOrderTask struct {
+	Accounted          bool   `gorm:"not null;default:false" json:"accounted"` // новый код chat: работа учтена отдельно
 	ID                 uint   `gorm:"primaryKey" json:"ID"`
 	ShiftID            uint   `gorm:"index" json:"shift_id"`
 	BlockID            uint   `gorm:"index;not null;default:0" json:"block_id"`          // новый код chat: блок сохраняется и без позиции

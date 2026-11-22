@@ -20,7 +20,7 @@ type workExcelSheet struct {
 var workExcelSheets = []workExcelSheet{
 	{"Смены", []workExcelColumn{{"Ключ смены", "key"}, {"Дата", "date"}, {"Цех", "shops"}, {"Смена (1 или 2)", "shift"}}},
 	{"Сотрудники", []workExcelColumn{{"Ключ строки", "key"}, {"Ключ смены", "parent"}, {"Сотрудник", "employees"}, {"Часы", "q2"}}},
-	{"Работы", []workExcelColumn{{"Ключ работы", "key"}, {"Ключ смены", "parent"}, {"Наименование работы", "text"}, {"Единица", "units"}, {"Количество", "q2"}, {"Человеко-часы", "hours"}, {"Блок", "blocks"}, {"Позиция", "positions"}}},
+	{"Работы", []workExcelColumn{{"Ключ работы", "key"}, {"Ключ смены", "parent"}, {"Наименование работы", "text"}, {"Единица", "units"}, {"Количество", "q2"}, {"Человеко-часы", "hours"}, {"Блок", "blocks"}, {"Позиция", "positions"}, {"Учтён", "bool"}}}, // новый код chat
 	{"Материалы работ", []workExcelColumn{{"Ключ строки", "key"}, {"Ключ работы", "parent"}, {"Материал", "materials"}, {"Количество", "q3"}}},
 }
 
@@ -152,7 +152,7 @@ func loadWorkExcelState(tx *gorm.DB, agreementID, bookID uint) (workExcelState, 
 			if t.PositionID != 0 {
 				position = workKey(t.PositionID)
 			}
-			s.Tables[2] = append(s.Tables[2], []string{workKey(t.ID), workKey(shift.ID), t.Name, unit, quantity, hours, block, position})
+			s.Tables[2] = append(s.Tables[2], []string{workKey(t.ID), workKey(shift.ID), t.Name, unit, quantity, hours, block, position, strconv.FormatBool(t.Accounted)}) // новый код chat
 			for _, m := range t.Materials {
 				s.Tables[3] = append(s.Tables[3], []string{workKey(m.ID), workKey(t.ID), workKey(m.MaterialID), workDecimal(m.QuantityThousandths, 3)})
 			}

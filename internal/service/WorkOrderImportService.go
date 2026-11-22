@@ -302,7 +302,7 @@ func applyWorkExcel(tx *gorm.DB, s workExcelState, final workExcelTables, report
 		}
 		for _, t := range rows[2] {
 			// новый код chat: единая проверка необязательных блока и позиции в SaveWorkShift.
-			task := WorkTaskInput{Name: t[2], UnitID: workUint(t[3]), Quantity: t[4], Hours: t[5], BlockID: workUint(t[6]), PositionID: workUint(t[7])}
+			task := WorkTaskInput{Name: t[2], UnitID: workUint(t[3]), Quantity: t[4], Hours: t[5], BlockID: workUint(t[6]), PositionID: workUint(t[7]), Accounted: t[8] == "true"} // новый код chat
 			for _, m := range rows[3] {
 				if m[1] == t[0] {
 					task.Materials = append(task.Materials, WorkMaterialInput{MaterialID: workUint(m[2]), Quantity: m[3]})

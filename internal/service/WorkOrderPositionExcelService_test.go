@@ -8,6 +8,65 @@ import (
 	"testing"
 )
 
+// новый код chat: отмеченные одинаковые работы остаются отдельными последними строками.
+func TestWorkPositionExcelAccounted(t *testing.T) {
+	f := newWorkFixture(t)
+	in := f.input()
+	in.Tasks[0].Materials[0].Quantity = "1"
+	marked := in.Tasks[0]
+	marked.Accounted = true
+	in.Tasks = append(in.Tasks, marked, marked)
+	shift, _, err := SaveWorkShift(f.db, f.a.ID, 0, in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	book, err := LoadWorkBook(f.db, f.a.ID, f.book.ID)
+	if err != nil || !book.Shifts[0].Tasks[1].Accounted {
+		t.Fatal("flag not saved", err)
+	}
+	balance, err := WarehouseBalance(f.db, f.material.ID)
+	if err != nil || balance != 97125 {
+		t.Fatal("stock changed by flag", balance, err)
+	}
+	file, err := BuildWorkOrderPositionExcel(f.db, f.a.ID, f.book.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+	rows, err := file.GetRows("Работы по позициям")
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for i, row := range rows {
+		if len(row) < 7 || row[1] != "Монтаж" {
+			continue
+		}
+		count++
+		if row[2] != "1" {
+			t.Fatal("accounted rows merged", row)
+		}
+		cell, _ := excelize.CoordinatesToCellName(2, i+1)
+		id, _ := file.GetCellStyle("Работы по позициям", cell)
+		style, _ := file.GetStyle(id)
+		if count > 1 && (len(style.Fill.Color) == 0 || style.Fill.Color[0] != "FCE8E8") {
+			t.Fatal("missing fill", style)
+		}
+	}
+	if count != 3 {
+		t.Fatal("wrong row count", count)
+	}
+	in.Version = shift.Version
+	in.Tasks[1].Accounted = false
+	if _, _, err := SaveWorkShift(f.db, f.a.ID, shift.ID, in); err != nil {
+		t.Fatal(err)
+	}
+	book, _ = LoadWorkBook(f.db, f.a.ID, f.book.ID)
+	if book.Shifts[0].Tasks[1].Accounted {
+		t.Fatal("flag not cleared")
+	}
+}
+
 func TestWorkPositionExcel(t *testing.T) {
 	f := newWorkFixture(t)
 	in := f.input()
@@ -51,7 +110,9 @@ func TestWorkPositionExcel(t *testing.T) {
 		t.Fatal("missing column headings", rows)
 	}
 	for index, row := range rows {
-		if len(row)>0 && strings.HasPrefix(row[0],"Позиция ") && row[0]!="Позиция № 1013 Объект / Блок / Цех 1" { t.Fatal("wrong section title",row[0]) } // новый код chat
+		if len(row) > 0 && strings.HasPrefix(row[0], "Позиция ") && row[0] != "Позиция № 1013 Объект / Блок / Цех 1" {
+			t.Fatal("wrong section title", row[0])
+		} // новый код chat
 		if strings.Contains(strings.Join(row, " "), "Итого по позиции") {
 			t.Fatal("unexpected totals")
 		}

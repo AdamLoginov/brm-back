@@ -371,7 +371,12 @@ func parseWorkOrderJournal(tx *gorm.DB, data []byte, s workExcelState) (workExce
 			if position != 0 {
 				p = workKey(position)
 			}
-			result[2] = append(result[2], []string{taskKey, key, v[7], unit, quantity, hours, b, p})
+			// новый код chat: отметка сайта сохраняется у сопоставленной записи при повторном импорте.
+			accounted := "false"
+			if index < len(oldTasks[key]) && oldTasks[key][index].Accounted {
+				accounted = "true"
+			}
+			result[2] = append(result[2], []string{taskKey, key, v[7], unit, quantity, hours, b, p, accounted})
 			lastTask[key] = taskKey
 		} else if strings.TrimSpace(strings.Join(append(append([]string{}, v[5:7]...), v[8:11]...), "")) != "" {
 			fail(rowNumber, "поля работы заполнены без наименования")
