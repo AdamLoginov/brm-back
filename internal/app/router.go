@@ -8,6 +8,9 @@ import (
 
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/blocks/{blockId}/statement", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler)) // новый код chat
+	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/statements/{statementMode}", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler)) // новый код chat: все ведомости одной книгой
+	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/positions/{positionId}/statement", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler)) // новый код chat: ведомость по шаблону
 	mux.HandleFunc("PATCH /api/agreements/{id}/work-orders/tasks/{taskId}", middleware.AuthMiddleware(handlers.WorkOrderHandler)) // новый код chat
 	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/positions/excel", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler)) // новый код chat: сводка всех позиций
 	// --------- новый код chat: Excel доступен с той же авторизацией, что и книга
