@@ -56,7 +56,7 @@ func BuildWorkOrderPositionExcel(db *gorm.DB, agreementID, bookID uint) (*exceli
 				sections[position][key] = group
 			}
 			group.count++
-			group.quantity += task.QuantityHundredths
+			group.quantity += workQuantityThousandths(task.WorkOrderTask) // новый код chat
 			if !task.HoursNotSpecified {
 				group.hours += task.HoursHundredths
 			}
@@ -99,7 +99,7 @@ func BuildWorkOrderPositionExcel(db *gorm.DB, agreementID, bookID uint) (*exceli
 	base := style(&excelize.Style{Border: borders, Font: &excelize.Font{Size: 11, Color: "000000"}, Alignment: &excelize.Alignment{Vertical: "top", WrapText: true}})
 	header := style(&excelize.Style{Border: borders, Font: &excelize.Font{Bold: true, Size: 11, Color: "000000"}, Alignment: &excelize.Alignment{WrapText: true, Vertical: "center"}})
 	sectionStyle := header
-	format := "#,##0.00"
+	format := "#,##0.00#" // новый код chat: прежние два знака и третий при необходимости
 	number := style(&excelize.Style{Border: borders, CustomNumFmt: &format, Font: &excelize.Font{Size: 11, Color: "000000"}, Alignment: &excelize.Alignment{Vertical: "top"}})
 	// новый код chat: только учтённые работы выделены бледно-красным.
 	accountedStyle := style(&excelize.Style{Border: borders, Font: &excelize.Font{Size: 11, Color: "000000"}, Fill: excelize.Fill{Type: "pattern", Color: []string{"FCE8E8"}, Pattern: 1}, Alignment: &excelize.Alignment{Vertical: "top", WrapText: true}})
@@ -143,7 +143,7 @@ func BuildWorkOrderPositionExcel(db *gorm.DB, agreementID, bookID uint) (*exceli
 		for index, key := range names {
 			group := groups[key]
 			text := materialText(group.materials)
-			write(row, []interface{}{index + 1, group.name, group.count, float64(group.quantity) / 100, label("units", group.unit), float64(group.hours) / 100, text})
+			write(row, []interface{}{index + 1, group.name, group.count, float64(group.quantity) / 1000, label("units", group.unit), float64(group.hours) / 100, text})
 			rowStyle, numberStyle := base, number
 			if group.accounted {
 				rowStyle, numberStyle = accountedStyle, accountedNumber

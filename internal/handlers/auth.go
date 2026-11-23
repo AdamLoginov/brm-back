@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"project/internal/config"
 	"project/internal/database"
+	"project/internal/middleware" // новый код chat: проверенный пользователь для продления
 	"project/internal/models"
 	"project/internal/service" // новый код chat
 	"strconv"
@@ -14,11 +15,13 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+const sessionLifetime = 72 * time.Hour // новый код chat: три дня без активности
+
 func GenerateToken(userID uint, login string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userID,
 		"login":   login,
-		"exp":     time.Now().Add(time.Hour * 24).Unix(),
+		"exp":     time.Now().Add(sessionLifetime).Unix(), // новый код chat
 	})
 
 	return token.SignedString(config.JWTKey)
@@ -60,7 +63,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// новый код chat: API по-прежнему получает Bearer, а файлы — отдельную cookie
-	if err := service.SetFileCookie(w, r, user.ID, time.Now().Add(24*time.Hour)); err != nil {
+	if err := service.SetFileCookie(w, r, user.ID, time.Now().Add(sessionLifetime)); err != nil { // новый код chat
 		http.Error(w, "Cookie error", 500)
 		return
 	}
@@ -69,3 +72,35 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		"user_id": strconv.FormatUint(uint64(user.ID), 10),
 	})
 }
+
+// --------- новый код chat: продление только действующей сессии по активности пользователя
+func RefreshSessionHandler(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	if !service.FileRequestOriginAllowed(r) {
+		http.Error(w, "Origin not allowed", http.StatusForbidden)
+		return
+	}
+	id := middleware.CurrentUserID(r)
+	if id == 0 {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	var user models.User
+	if err := database.DB.First(&user, id).Error; err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	token, err := GenerateToken(user.ID, user.Login)
+	if err != nil {
+		http.Error(w, "Unable to create token", http.StatusInternalServerError)
+		return
+	}
+	if err := service.SetFileCookie(w, r, user.ID, time.Now().Add(sessionLifetime)); err != nil {
+		http.Error(w, "Cookie error", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"token": token})
+}
+
+// --------- конец нового кода chat

@@ -314,7 +314,7 @@ func applyWorkExcel(tx *gorm.DB, s workExcelState, final workExcelTables, report
 		if beforeShifts[key] != nil {
 			id = workUint(key)
 		}
-		_, warning, err := SaveWorkShift(tx, s.Book.AgreementID, id, input)
+		_, warning, err := saveWorkShift(tx, s.Book.AgreementID, id, input, true) // новый код chat: участники из общего списка
 		if err != nil {
 			return fmt.Errorf("Смена %s (%s): %w", key, r[1], err)
 		}

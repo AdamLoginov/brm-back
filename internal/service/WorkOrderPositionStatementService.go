@@ -96,7 +96,7 @@ func fillWorkPositionStatement(f *excelize.File, sheet string, book WorkBookDeta
 			if groups[key] == nil {
 				groups[key] = &work{name: task.Name, unit: task.UnitID}
 			}
-			groups[key].quantity += task.QuantityHundredths
+			groups[key].quantity += workQuantityThousandths(task.WorkOrderTask) // новый код chat
 			if !task.HoursNotSpecified {
 				groups[key].hours += task.HoursHundredths
 			}
@@ -160,7 +160,7 @@ func fillWorkPositionStatement(f *excelize.File, sheet string, book WorkBookDeta
 		}
 		// новый код chat: целые часы без дробной части, дробные — с запятой без лишних нулей.
 		hoursText := strings.TrimRight(strings.TrimRight(workDecimal(item.hours, 2), "0"), ".")
-		values := []interface{}{index + 1, item.name, unit, float64(item.quantity) / 100, strings.ReplaceAll(hoursText, ".", ",") + " чел. час", ""}
+		values := []interface{}{index + 1, item.name, unit, float64(item.quantity) / 1000, strings.ReplaceAll(hoursText, ".", ",") + " чел. час", ""}
 		check(f.SetSheetRow(sheet, fmt.Sprintf("A%d", row), &values))
 		// Сохраняем стили исходного шаблона, увеличивая высоту для длинных названий.
 		lines := 0

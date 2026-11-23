@@ -8,11 +8,11 @@ import (
 
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/blocks/{blockId}/statement", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler)) // новый код chat
-	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/statements/{statementMode}", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler)) // новый код chat: все ведомости одной книгой
+	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/blocks/{blockId}/statement", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler))       // новый код chat
+	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/statements/{statementMode}", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler))       // новый код chat: все ведомости одной книгой
 	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/positions/{positionId}/statement", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler)) // новый код chat: ведомость по шаблону
-	mux.HandleFunc("PATCH /api/agreements/{id}/work-orders/tasks/{taskId}", middleware.AuthMiddleware(handlers.WorkOrderHandler)) // новый код chat
-	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/positions/excel", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler)) // новый код chat: сводка всех позиций
+	mux.HandleFunc("PATCH /api/agreements/{id}/work-orders/tasks/{taskId}", middleware.AuthMiddleware(handlers.WorkOrderHandler))                                             // новый код chat
+	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/positions/excel", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler))                  // новый код chat: сводка всех позиций
 	// --------- новый код chat: Excel доступен с той же авторизацией, что и книга
 	mux.HandleFunc("POST /api/agreements/{id}/work-orders/books/{bookId}/excel/{excelAction}", middleware.AuthMiddleware(handlers.WorkOrderExcelHandler))
 	// --------- конец нового кода chat
@@ -217,6 +217,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/files/attachments/{id}", middleware.FileAuthMiddleware(handlers.DownloadAttachmenthandler))
 	// --------- конец нового кода chat
 	mux.HandleFunc("POST /api/login", handlers.LoginHandler)
+	mux.HandleFunc("POST /api/session/refresh", middleware.AuthMiddleware(handlers.RefreshSessionHandler)) // новый код chat: активность продлевает сессию
 
 	return middleware.CorsMiddleware(mux)
 }

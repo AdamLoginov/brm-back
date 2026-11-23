@@ -20,7 +20,7 @@ type workExcelSheet struct {
 var workExcelSheets = []workExcelSheet{
 	{"Смены", []workExcelColumn{{"Ключ смены", "key"}, {"Дата", "date"}, {"Цех", "shops"}, {"Смена (1 или 2)", "shift"}}},
 	{"Сотрудники", []workExcelColumn{{"Ключ строки", "key"}, {"Ключ смены", "parent"}, {"Сотрудник", "employees"}, {"Часы", "q2"}}},
-	{"Работы", []workExcelColumn{{"Ключ работы", "key"}, {"Ключ смены", "parent"}, {"Наименование работы", "text"}, {"Единица", "units"}, {"Количество", "q2"}, {"Человеко-часы", "hours"}, {"Блок", "blocks"}, {"Позиция", "positions"}, {"Учтён", "bool"}}}, // новый код chat
+	{"Работы", []workExcelColumn{{"Ключ работы", "key"}, {"Ключ смены", "parent"}, {"Наименование работы", "text"}, {"Единица", "units"}, {"Количество", "q3"}, {"Человеко-часы", "hours"}, {"Блок", "blocks"}, {"Позиция", "positions"}, {"Учтён", "bool"}}}, // новый код chat
 	{"Материалы работ", []workExcelColumn{{"Ключ строки", "key"}, {"Ключ работы", "parent"}, {"Материал", "materials"}, {"Количество", "q3"}}},
 }
 
@@ -74,7 +74,7 @@ func loadWorkExcelState(tx *gorm.DB, agreementID, bookID uint) (workExcelState, 
 		tx.Where("agreement_id = ?", agreementID).Order("id").Find(&blocks),
 		tx.Where("agreement_id = ?", agreementID).Order("id").Find(&positions),
 		tx.Order("id").Find(&units),
-		tx.Select("id", "name", "surname", "middle_name").Where("agreement_id = ?", agreementID).Order("id").Find(&employees),
+		tx.Unscoped().Select("id", "name", "surname", "middle_name").Order("id").Find(&employees), // новый код chat: весь список, включая удалённых
 	} {
 		if q.Error != nil {
 			return s, q.Error
@@ -134,8 +134,8 @@ func loadWorkExcelState(tx *gorm.DB, agreementID, bookID uint) (workExcelState, 
 			if t.UnitID != 0 {
 				unit = workKey(t.UnitID)
 			}
-			if t.QuantityHundredths != 0 {
-				quantity = workDecimal(t.QuantityHundredths, 2)
+			if workQuantityThousandths(t.WorkOrderTask) != 0 {
+				quantity = workDecimal(workQuantityThousandths(t.WorkOrderTask), 3)
 			}
 			// новый код chat: пустые часы, блок и позиция сохраняются пустыми в Excel.
 			hours, block, position := "", "", ""

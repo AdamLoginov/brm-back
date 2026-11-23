@@ -130,7 +130,7 @@ func parseWorkOrderJournal(tx *gorm.DB, data []byte, s workExcelState) (workExce
 			}
 		}
 		if len(matches) != 1 {
-			return 0, fmt.Errorf("сотрудник «%s»: найдено совпадений %d; уточните ФИО и закрепление за договором", value, len(matches))
+			return 0, fmt.Errorf("сотрудник «%s»: найдено совпадений %d; укажите полные ФИО как в карточке сотрудника", value, len(matches)) // новый код chat: закрепление для импорта не требуется
 		}
 		for id := range matches {
 			return id, nil
@@ -338,16 +338,18 @@ func parseWorkOrderJournal(tx *gorm.DB, data []byte, s workExcelState) (workExce
 			}
 			quantity, hours := "", ""
 			for _, pair := range []struct {
-				index int
-				dest  *string
-				zero  bool
-			}{{9, &quantity, false}, {10, &hours, true}} {
+				index  int
+				dest   *string
+				zero   bool
+				digits int    // новый код chat
+				label  string // новый код chat
+			}{{9, &quantity, false, 3, "объём работы"}, {10, &hours, true, 2, "человеко-часы"}} {
 				if v[pair.index] != "" {
-					n, e := ParseWorkQuantity(v[pair.index], 2, pair.zero)
+					n, e := ParseWorkQuantity(v[pair.index], pair.digits, pair.zero) // новый код chat
 					if e != nil {
-						fail(rowNumber, e.Error())
+						fail(rowNumber, pair.label+": "+e.Error()) // новый код chat: конкретное поле
 					} else {
-						*pair.dest = workDecimal(n, 2)
+						*pair.dest = workDecimal(n, pair.digits) // новый код chat
 					}
 				}
 			}

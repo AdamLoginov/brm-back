@@ -62,16 +62,17 @@ type WorkOrderEmployee struct {
 	HoursHundredths int64  `json:"hours_hundredths"`
 }
 type WorkOrderTask struct {
-	Accounted          bool   `gorm:"not null;default:false" json:"accounted"` // новый код chat: работа учтена отдельно
-	ID                 uint   `gorm:"primaryKey" json:"ID"`
-	ShiftID            uint   `gorm:"index" json:"shift_id"`
-	BlockID            uint   `gorm:"index;not null;default:0" json:"block_id"`          // новый код chat: блок сохраняется и без позиции
-	HoursNotSpecified  bool   `gorm:"not null;default:false" json:"hours_not_specified"` // новый код chat: отличаем пустые часы от введённого нуля
-	PositionID         uint   `gorm:"index" json:"position_id"`
-	Name               string `json:"name"`
-	UnitID             uint   `json:"unit_id"`
-	QuantityHundredths int64  `json:"quantity_hundredths"`
-	HoursHundredths    int64  `json:"hours_hundredths"`
+	Accounted           bool   `gorm:"not null;default:false" json:"accounted"` // новый код chat: работа учтена отдельно
+	ID                  uint   `gorm:"primaryKey" json:"ID"`
+	ShiftID             uint   `gorm:"index" json:"shift_id"`
+	BlockID             uint   `gorm:"index;not null;default:0" json:"block_id"`          // новый код chat: блок сохраняется и без позиции
+	HoursNotSpecified   bool   `gorm:"not null;default:false" json:"hours_not_specified"` // новый код chat: отличаем пустые часы от введённого нуля
+	PositionID          uint   `gorm:"index" json:"position_id"`
+	Name                string `json:"name"`
+	UnitID              uint   `json:"unit_id"`
+	QuantityHundredths  int64  `json:"quantity_hundredths"`
+	QuantityThousandths *int64 `json:"quantity_thousandths"` // новый код chat: nil у старых записей
+	HoursHundredths     int64  `json:"hours_hundredths"`
 }
 type WarehouseMaterial struct {
 	ID          uint   `gorm:"primaryKey" json:"ID"`

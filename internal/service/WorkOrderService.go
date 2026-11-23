@@ -133,6 +133,11 @@ func clearWorkShift(tx *gorm.DB, id uint) error {
 }
 
 func SaveWorkShift(db *gorm.DB, agreementID, shiftID uint, input WorkShiftInput) (models.WorkOrderShift, string, error) {
+	return saveWorkShift(db, agreementID, shiftID, input, false) // новый код chat: обычный ввод сохраняет проверку договора
+}
+
+// новый код chat: расширенный выбор сотрудников разрешён только внутреннему импорту
+func saveWorkShift(db *gorm.DB, agreementID, shiftID uint, input WorkShiftInput, importing bool) (models.WorkOrderShift, string, error) {
 	var shift models.WorkOrderShift
 	warning := ""
 	err := WorkTransaction(db, agreementID, func(tx *gorm.DB) error {
@@ -191,7 +196,11 @@ func SaveWorkShift(db *gorm.DB, agreementID, shiftID uint, input WorkShiftInput)
 				name = old.EmployeeName
 			} else {
 				var employee models.EmployeeCard
-				if err := tx.Where("id = ? AND agreement_id = ?", e.EmployeeCardID, agreementID).First(&employee).Error; err != nil {
+				query := tx.Where("id = ? AND agreement_id = ?", e.EmployeeCardID, agreementID)
+				if importing {
+					query = tx.Unscoped().Where("id = ?", e.EmployeeCardID)
+				} // новый код chat: без восстановления карточки
+				if err := query.First(&employee).Error; err != nil {
 					return errors.New("Новый участник должен быть закреплён за договором")
 				}
 				parts := []string{}
@@ -310,7 +319,7 @@ func saveWorkTask(tx *gorm.DB, agreementID uint, shift models.WorkOrderShift, ta
 	var quantity int64
 	if strings.TrimSpace(inputTask.Quantity) != "" {
 		var err error
-		quantity, err = ParseWorkQuantity(inputTask.Quantity, 2, false)
+		quantity, err = ParseWorkQuantity(inputTask.Quantity, 3, false) // новый код chat: точный импортированный объём
 		if err != nil {
 			return models.WorkOrderTask{}, err
 		}
@@ -326,8 +335,8 @@ func saveWorkTask(tx *gorm.DB, agreementID uint, shift models.WorkOrderShift, ta
 			return models.WorkOrderTask{}, err
 		}
 	}
-	task := models.WorkOrderTask{Accounted: inputTask.Accounted, ShiftID: shift.ID, BlockID: blockID, PositionID: inputTask.PositionID, Name: name, UnitID: inputTask.UnitID, QuantityHundredths: quantity, HoursHundredths: hours, HoursNotSpecified: hoursNotSpecified} // новый код chat
-	task.ID = taskID                                                                                                                                                                                                                                                      // новый код chat: сохраняем ID при изменении отдельной работы
+	task := models.WorkOrderTask{Accounted: inputTask.Accounted, ShiftID: shift.ID, BlockID: blockID, PositionID: inputTask.PositionID, Name: name, UnitID: inputTask.UnitID, QuantityHundredths: quantity / 10, QuantityThousandths: &quantity, HoursHundredths: hours, HoursNotSpecified: hoursNotSpecified} // новый код chat
+	task.ID = taskID                                                                                                                                                                                                                                                                                           // новый код chat: сохраняем ID при изменении отдельной работы
 	if err := tx.Save(&task).Error; err != nil {
 		return models.WorkOrderTask{}, err
 	}
