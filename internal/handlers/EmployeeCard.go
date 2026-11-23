@@ -32,7 +32,13 @@ func GetEmployeeCardDetailHandler(w http.ResponseWriter, r *http.Request) {
 func GetAllEmployeeCardAgreementHandler(w http.ResponseWriter, r *http.Request) {
 	var agreementID = r.PathValue("id")
 	var employeeCards []models.EmployeeCard
-	if err := database.DB.Where("agreement_id = ?", agreementID).Find(&employeeCards).Error; err != nil {
+	// --------- новый код chat: расширенный список только для выбора в табель
+	query := database.DB.Where("agreement_id = ?", agreementID)
+	if r.URL.Query().Get("timesheet_candidates") == "1" {
+		query = database.DB.Where("(agreement_id = ? AND status = ?) OR (status = ? AND dismissal_date <> '')", agreementID, false, true)
+	}
+	// --------- конец нового кода chat
+	if err := query.Find(&employeeCards).Error; err != nil {
 		msg := "[Error] Ошибка при поиске"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)

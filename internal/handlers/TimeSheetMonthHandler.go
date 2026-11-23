@@ -2,13 +2,37 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"          // новый код chat: проверка месяца увольнения
 	"gorm.io/gorm" // новый код chat
 	"log"
 	"net/http"
 	"project/internal/database"
 	"project/internal/models"
 	"project/internal/service" // новый код chat
+	"time"                     // новый код chat
 )
+
+// --------- новый код chat: месяц увольнения включительно доступен для табеля
+func validateTimeSheetEmployeeDates(employees []models.EmployeeCard, year, month uint) error {
+	if year < 1 || year > 9999 || month < 1 || month > 12 {
+		return fmt.Errorf("Укажите корректный месяц и год табеля")
+	}
+	first := fmt.Sprintf("%04d-%02d-01", year, month)
+	for _, employee := range employees {
+		if !employee.Status {
+			continue
+		}
+		if _, err := time.Parse("2006-01-02", employee.DismissalDate); err != nil {
+			return fmt.Errorf("У сотрудника %s не указана корректная дата увольнения", employee.Name)
+		}
+		if employee.DismissalDate < first {
+			return fmt.Errorf("Сотрудник %s уволен %s: нельзя добавить в табель после месяца увольнения", employee.Name, employee.DismissalDate)
+		}
+	}
+	return nil
+}
+
+// --------- конец нового кода chat
 
 func GetAllTimeSheetMonthHandler(w http.ResponseWriter, r *http.Request) {
 	var agreementId = r.PathValue("id")
@@ -70,6 +94,12 @@ func CreateTimeSheetMonthHandler(w http.ResponseWriter, r *http.Request) {
 		return // новый код chat: прервать сохранение после ошибки
 	}
 
+	// --------- новый код chat: запрет добавления после месяца увольнения
+	if err := validateTimeSheetEmployeeDates(employees, input.Year, input.Month); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// --------- конец нового кода chat
 	// --------- новый код chat: проверка настроек нового табеля
 	shiftHours, penalty, err := service.ParseTimeSheetSettings(input.ShiftHours, input.AbsencePenalty, "12", 0)
 	if err != nil {
@@ -141,6 +171,12 @@ func UpdateTimeSheetMonthHandler(w http.ResponseWriter, r *http.Request) {
 		return // новый код chat: прервать сохранение после ошибки
 	}
 
+	// --------- новый код chat: дата увольнения проверяется и при изменении табеля
+	if err := validateTimeSheetEmployeeDates(employees, input.Year, input.Month); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	// --------- конец нового кода chat
 	// --------- новый код chat: настройки, состав сотрудников и штрафы сохраняются вместе
 	shiftHours, penalty, err := service.ParseTimeSheetSettings(input.ShiftHours, input.AbsencePenalty, timeSheetMonth.ShiftHours, timeSheetMonth.AbsencePenaltyKopecks)
 	if err != nil {
