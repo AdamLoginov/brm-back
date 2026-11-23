@@ -7,17 +7,12 @@ import (
 	"testing"
 )
 
-func TestWorkJournalDeletedEmployeeAndThousandths(t *testing.T) {
-	for _, deleted := range []bool{false, true} {
+func TestWorkJournalDismissedEmployeeAndThousandths(t *testing.T) {
+	for _, dismissed := range []bool{false, true} {
 		f := newWorkFixture(t)
 		file := journalFixtureFile(t, f)
-		if err := f.db.Model(&f.employee).Update("agreement_id", 0).Error; err != nil {
+		if err := f.db.Model(&f.employee).Updates(map[string]any{"agreement_id": 0, "status": dismissed, "dismissal_date": "2028-02-15"}).Error; err != nil { // новый код chat: увольнение вместо удаления
 			t.Fatal(err)
-		}
-		if deleted {
-			if err := f.db.Delete(&f.employee).Error; err != nil {
-				t.Fatal(err)
-			}
 		}
 		excelCell(t, file, "Sheet1", "J3", "1,125")
 		data := excelBytes(t, file)
@@ -32,11 +27,11 @@ func TestWorkJournalDeletedEmployeeAndThousandths(t *testing.T) {
 			t.Fatalf("lost precision: %+v", task)
 		}
 		var employee models.EmployeeCard
-		if err := f.db.Unscoped().First(&employee, f.employee.ID).Error; err != nil {
+		if err := f.db.First(&employee, f.employee.ID).Error; err != nil {
 			t.Fatal(err)
 		}
-		if employee.AgreementID != 0 || employee.DeletedAt.Valid != deleted {
-			t.Fatal("employee restored or reassigned")
+		if employee.AgreementID != 0 || employee.Status != dismissed || employee.DismissalDate != "2028-02-15" {
+			t.Fatal("employee employment or agreement changed")
 		}
 		if len(previewExcel(t, f, data).Changes) != 0 {
 			t.Fatal("repeat import changed data")
@@ -100,5 +95,26 @@ func TestWorkJournalQuantityPrecisionLimit(t *testing.T) {
 		t.Fatal("legacy quantity changed")
 	}
 }
+
+// --------- новый код chat: удалённая карточка не доступна даже через историю смены
+func TestWorkJournalExcludesDeletedEmployee(t *testing.T) {
+	f := newWorkFixture(t)
+	file := journalFixtureFile(t, f)
+	data := excelBytes(t, file)
+	report := previewExcel(t, f, data)
+	confirmExcel(t, f, data, report.Token)
+	if err := f.db.Delete(&f.employee).Error; err != nil {
+		t.Fatal(err)
+	}
+	report, err := ImportWorkOrderExcel(f.db, f.a.ID, f.book.ID, data, "", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(report.Errors, " "), "найдено совпадений 0") {
+		t.Fatalf("deleted employee found through history: %v", report.Errors)
+	}
+}
+
+// --------- конец нового кода chat
 
 // --------- конец нового кода chat

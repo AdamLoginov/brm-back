@@ -198,8 +198,8 @@ func saveWorkShift(db *gorm.DB, agreementID, shiftID uint, input WorkShiftInput,
 				var employee models.EmployeeCard
 				query := tx.Where("id = ? AND agreement_id = ?", e.EmployeeCardID, agreementID)
 				if importing {
-					query = tx.Unscoped().Where("id = ?", e.EmployeeCardID)
-				} // новый код chat: без восстановления карточки
+					query = tx.Where("id = ?", e.EmployeeCardID)
+				} // новый код chat: работающие и уволенные без ограничения договора; удалённые исключены
 				if err := query.First(&employee).Error; err != nil {
 					return errors.New("Новый участник должен быть закреплён за договором")
 				}

@@ -74,7 +74,7 @@ func loadWorkExcelState(tx *gorm.DB, agreementID, bookID uint) (workExcelState, 
 		tx.Where("agreement_id = ?", agreementID).Order("id").Find(&blocks),
 		tx.Where("agreement_id = ?", agreementID).Order("id").Find(&positions),
 		tx.Order("id").Find(&units),
-		tx.Unscoped().Select("id", "name", "surname", "middle_name").Order("id").Find(&employees), // новый код chat: весь список, включая удалённых
+		tx.Select("id", "name", "surname", "middle_name").Order("id").Find(&employees), // новый код chat: весь список работающих и уволенных, без удалённых карточек
 	} {
 		if q.Error != nil {
 			return s, q.Error
@@ -123,9 +123,7 @@ func loadWorkExcelState(tx *gorm.DB, agreementID, bookID uint) (workExcelState, 
 	for _, shift := range s.Book.Shifts {
 		s.Tables[0] = append(s.Tables[0], []string{workKey(shift.ID), dates[shift.DayID], workKey(shift.WorkshopID), strconv.Itoa(shift.Number)})
 		for _, e := range shift.Employees {
-			if _, ok := s.Refs["employees"][workKey(e.EmployeeCardID)]; !ok {
-				add("employees", e.EmployeeCardID, e.EmployeeName+" (переведён)")
-			}
+			// новый код chat: историческая запись не возвращает удалённую карточку в список импорта
 			s.Tables[1] = append(s.Tables[1], []string{workKey(e.ID), workKey(shift.ID), workKey(e.EmployeeCardID), workDecimal(e.HoursHundredths, 2)})
 		}
 		for _, t := range shift.Tasks {
