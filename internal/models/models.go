@@ -120,6 +120,7 @@ type EmployeeCard struct {
 	PlaceOFResidence string  `json:"place_of_residence"`
 	MaritalStatus    string  `json:"marital_status"`
 	StartDate        string  `json:"start_date"`
+	DismissalDate    string  `json:"dismissal_date"` // новый код chat: дата увольнения, пустая для работающих
 	Expenses         string  `json:"experience"`
 	Education        string  `json:"education"`
 	PasportNumber    string  `json:"pasport_number"`

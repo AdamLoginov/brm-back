@@ -139,6 +139,69 @@ func TestTimeSheetAutomaticPenalties(t *testing.T) {
 	}
 }
 
+// --------- новый код chat: граница увольнения, запрет API и очистка связанных данных
+func TestTimeSheetDismissal(t *testing.T) {
+	db := salaryTestDB(t)
+	if err := db.AutoMigrate(&models.SalaryPenalty{}); err != nil {
+		t.Fatal(err)
+	}
+	_, month, employee := salaryFixture(t, db)
+	if err := db.Model(&month).Updates(map[string]any{"absence_penalty_kopecks": 10000, "daily_allowance_kopecks": 50000}).Error; err != nil {
+		t.Fatal(err)
+	}
+	entries := []models.TimeSheet{
+		{TimeSheetMonthID: month.ID, EmployeeCardID: employee.ID, Date: "2026-01-09", Status: "11"},
+		{TimeSheetMonthID: month.ID, EmployeeCardID: employee.ID, Date: "2026-01-10", Status: "П"},
+		{TimeSheetMonthID: month.ID, EmployeeCardID: employee.ID, Date: "2026-01-11", Status: "11"},
+	}
+	if err := ChangeTimeSheetEntries(db, entries, "create"); err != nil {
+		t.Fatal(err)
+	}
+	employee.Status, employee.DismissalDate = true, "2026-01-10"
+	if err := db.Model(&employee).Updates(map[string]any{"status": true, "dismissal_date": employee.DismissalDate}).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, date := range []string{"2026-01-10", "2026-01-31", "2026-02-01"} {
+		if err := ChangeTimeSheetEntries(db, []models.TimeSheet{{TimeSheetMonthID: month.ID, EmployeeCardID: employee.ID, Date: date, Status: "12"}}, "create"); err == nil {
+			t.Fatalf("accepted dismissed date %s", date)
+		}
+	}
+	if err := ChangeTimeSheetEntries(db, entries[1:2], "update"); err == nil {
+		t.Fatal("updated dismissed day")
+	}
+	entries[0].Status = "12"
+	if err := ChangeTimeSheetEntries(db, entries[:1], "update"); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Transaction(func(tx *gorm.DB) error { return ClearDismissedEmployeeTimeSheets(tx, employee) }); err != nil {
+		t.Fatal(err)
+	}
+	var remaining []models.TimeSheet
+	if err := db.Where("employee_card_id = ?", employee.ID).Find(&remaining).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(remaining) != 1 || remaining[0].Date != "2026-01-09" || remaining[0].Status != "12" {
+		t.Fatalf("wrong remaining entries: %+v", remaining)
+	}
+	var penalties int64
+	db.Model(&models.SalaryPenalty{}).Count(&penalties)
+	if penalties != 0 {
+		t.Fatal("dismissal penalty remains")
+	}
+	var accruals []models.DailyAllowanceAccrual
+	if err := db.Find(&accruals).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(accruals) != 1 {
+		t.Fatalf("expected only pre-dismissal daily accrual, got %d", len(accruals))
+	}
+	if err := db.Transaction(func(tx *gorm.DB) error { return ClearDismissedEmployeeTimeSheets(tx, employee) }); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// --------- конец нового кода chat
+
 func TestTimeSheetPenaltyRollbackAndShiftCalculation(t *testing.T) {
 	db := salaryTestDB(t)
 	if err := db.AutoMigrate(&models.SalaryPenalty{}); err != nil {

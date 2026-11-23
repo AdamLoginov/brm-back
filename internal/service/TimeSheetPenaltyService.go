@@ -138,6 +138,10 @@ func ChangeTimeSheetEntries(db *gorm.DB, entries []models.TimeSheet, action stri
 				for _, employee := range month.Employees {
 					if employee.ID == input.EmployeeCardID {
 						member = true
+						// новый код chat: нельзя создать отметку начиная с увольнения
+						if employee.Status && employee.DismissalDate != "" && input.Date >= employee.DismissalDate {
+							return errors.New("Нельзя заполнять табель с даты увольнения сотрудника")
+						}
 						break
 					}
 				}
@@ -167,6 +171,15 @@ func ChangeTimeSheetEntries(db *gorm.DB, entries []models.TimeSheet, action stri
 				}
 				switch action {
 				case "update":
+					// --------- новый код chat: проверка по реальному сотруднику и дате записи
+					var employee models.EmployeeCard
+					if err := tx.First(&employee, row.EmployeeCardID).Error; err != nil {
+						return err
+					}
+					if employee.Status && employee.DismissalDate != "" && row.Date >= employee.DismissalDate {
+						return errors.New("Нельзя заполнять табель с даты увольнения сотрудника")
+					}
+					// --------- конец нового кода chat
 					row.Status = input.Status
 					if err := tx.Model(&row).Update("status", row.Status).Error; err != nil {
 						return err
@@ -193,5 +206,23 @@ func ChangeTimeSheetEntries(db *gorm.DB, entries []models.TimeSheet, action stri
 		return nil
 	})
 }
+
+// --------- новый код chat: очистка отметок и производных начислений после увольнения
+// Вызывается внутри транзакции сохранения карточки сотрудника.
+func ClearDismissedEmployeeTimeSheets(tx *gorm.DB, employee models.EmployeeCard) error {
+	if !employee.Status || employee.DismissalDate == "" {
+		return nil
+	}
+	var entries []models.TimeSheet
+	if err := tx.Where("employee_card_id = ? AND date >= ?", employee.ID, employee.DismissalDate).Find(&entries).Error; err != nil {
+		return err
+	}
+	if len(entries) == 0 {
+		return nil
+	}
+	return ChangeTimeSheetEntries(tx, entries, "delete")
+}
+
+// --------- конец нового кода chat
 
 // --------- конец нового кода chat

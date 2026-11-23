@@ -51,7 +51,9 @@ func SyncDailyAllowanceAccruals(tx *gorm.DB, monthID uint) error {
 		return ErrSalaryAmountOverflow
 	}
 	members := map[uint]string{}
+	dismissals := map[uint]models.EmployeeCard{} // новый код chat: исключение дней увольнения
 	for _, employee := range month.Employees {
+		dismissals[employee.ID] = employee // новый код chat
 		members[employee.ID] = dailyEmployeeName(employee)
 	}
 	// Последняя запись дня определяет отметку; исторические дубли не начисляют день дважды.
@@ -64,6 +66,9 @@ func SyncDailyAllowanceAccruals(tx *gorm.DB, monthID uint) error {
 	}
 	keep := []uint{}
 	for _, entry := range entries {
+		if dailyDismissedOn(dismissals[entry.EmployeeCardID], entry.Date) {
+			continue
+		} // новый код chat
 		name, member := members[entry.EmployeeCardID]
 		if !member || parseSalaryDecimal(entry.Status).Sign() <= 0 || month.DailyAllowanceKopecks == 0 {
 			continue
@@ -92,6 +97,11 @@ func DeleteDailyAllowanceAccruals(tx *gorm.DB, monthID uint) error {
 	return tx.Where("time_sheet_month_id = ?", monthID).Delete(&models.DailyAllowanceAccrual{}).Error
 }
 
+// новый код chat: дата увольнения включительно не оплачивается
+func dailyDismissedOn(employee models.EmployeeCard, date string) bool {
+	return employee.Status && employee.DismissalDate != "" && date >= employee.DismissalDate
+}
+
 type DailyAllowanceCell struct {
 	Date                   string `json:"date"`
 	Mark                   string `json:"mark"`
@@ -101,6 +111,10 @@ type DailyAllowanceCell struct {
 	PreviewRequiredKopecks int64  `json:"preview_required_kopecks"` // новый код chat: сколько дополнительно выдать для полного покрытия дня
 }
 type DailyAllowanceEmployee struct {
+	// --------- новый код chat: увольнение для подсветки сотрудника в месяце табеля
+	Status        bool   `json:"status"`
+	DismissalDate string `json:"dismissal_date"`
+	// --------- конец нового кода chat
 	IsITR            bool                 `json:"is_itr"` // новый код chat: подсветка ФИО в табеле суточных
 	EmployeeCardID   uint                 `json:"employee_card_id"`
 	EmployeeName     string               `json:"employee_name"`
@@ -156,9 +170,11 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 			return err
 		}
 		people := map[uint]string{}
-		itrMembers := map[uint]bool{}   // новый код chat: признак из карточки сотрудника
-		tableMembers := map[uint]bool{} // новый код chat: показываем только сотрудников выбранного табеля
+		dismissalCards := map[uint]models.EmployeeCard{} // новый код chat: данные увольнения из карточки
+		itrMembers := map[uint]bool{}                    // новый код chat: признак из карточки сотрудника
+		tableMembers := map[uint]bool{}                  // новый код chat: показываем только сотрудников выбранного табеля
 		for _, employee := range selected.Employees {
+			dismissalCards[employee.ID] = employee // новый код chat
 			people[employee.ID] = dailyEmployeeName(employee)
 			tableMembers[employee.ID] = true         // новый код chat
 			itrMembers[employee.ID] = employee.IsITR // новый код chat
@@ -268,6 +284,9 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 		// --------- новый код chat: начало прогноза по рабочим отметкам именно выбранного табеля
 		selectedLastWorked := map[uint]string{}
 		for _, entry := range marks {
+			if dailyDismissedOn(dismissalCards[entry.EmployeeCardID], entry.Date) {
+				continue
+			} // новый код chat
 			if entry.Date < result.Today && entry.Date > selectedLastWorked[entry.EmployeeCardID] && parseSalaryDecimal(entry.Status).Sign() > 0 {
 				selectedLastWorked[entry.EmployeeCardID] = entry.Date
 			}
@@ -292,6 +311,9 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 		}
 		// Рабочие дни с нулевой ставкой тоже задают начало последующего покрытия.
 		for _, entry := range reservationMarks {
+			if dailyDismissedOn(dismissalCards[entry.EmployeeCardID], entry.Date) {
+				continue
+			} // новый код chat
 			if entry.Date < result.Today && entry.Date > lastWorked[entry.EmployeeCardID] && parseSalaryDecimal(entry.Status).Sign() > 0 {
 				lastWorked[entry.EmployeeCardID] = entry.Date
 			}
@@ -302,6 +324,8 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 				continue
 			} // новый код chat: история и другие сотрудники договора не расширяют список
 			employee := DailyAllowanceEmployee{EmployeeCardID: id, EmployeeName: name, IsITR: itrMembers[id], IsAssigned: assigned[id], BalanceKopecks: paid[id] - earned[id], Cells: []DailyAllowanceCell{}}
+			employee.Status = dismissalCards[id].Status               // новый код chat
+			employee.DismissalDate = dismissalCards[id].DismissalDate // новый код chat
 			if through != "" && employee.IsAssigned {
 				if result.RateKopecks <= 0 {
 					return dailyError("Укажите суточные в выбранном табеле")
@@ -319,6 +343,9 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 				var needed int64
 				for day := start; !day.After(end); day = day.AddDate(0, 0, 1) {
 					date := day.Format("2006-01-02")
+					if dailyDismissedOn(dismissalCards[id], date) {
+						break
+					} // новый код chat: прогноз заканчивается до увольнения
 					key := fmt.Sprintf("%d:%s", id, date)
 					if _, worked := actual[key]; worked {
 						continue
@@ -367,6 +394,9 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 			}
 			for day := start; !day.After(monthEnd) && employee.IsAssigned; day = day.AddDate(0, 0, 1) { // новый код chat: пороги прогноза также для ещё не обеспеченных дней
 				date := day.Format("2006-01-02")
+				if dailyDismissedOn(dismissalCards[id], date) {
+					break
+				} // новый код chat: остаток после увольнения не расходуем
 				key := fmt.Sprintf("%d:%s", id, date)
 				if entry, ok := reservationMarks[key]; ok {
 					mark := strings.TrimSpace(entry.Status)
@@ -418,6 +448,11 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 						cell.Mark = mark
 					}
 				}
+				// --------- новый код chat: закрытый день без начисления и прогноза
+				if dailyDismissedOn(dismissalCards[id], date) {
+					cell = DailyAllowanceCell{Date: date, State: "dismissed"}
+				}
+				// --------- конец нового кода chat
 				employee.Cells = append(employee.Cells, cell)
 			}
 			result.Employees = append(result.Employees, employee)

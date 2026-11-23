@@ -12,11 +12,21 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time" // новый код chat: проверка даты увольнения
 )
 
 var employeeProfileMutex sync.Mutex
 
 func saveEmployeeProfile(employee *models.EmployeeCard, id string) error {
+	// --------- новый код chat: дата обязательна при сохранении уволенного сотрудника
+	if employee.Status {
+		if _, err := time.Parse("2006-01-02", employee.DismissalDate); err != nil {
+			return errors.New("Укажите корректную дату увольнения")
+		}
+	} else {
+		employee.DismissalDate = ""
+	}
+	// --------- конец нового кода chat
 	employeeProfileMutex.Lock()
 	defer employeeProfileMutex.Unlock()
 	// --------- новый код chat: согласованное изменение ФИО и путей документов
@@ -87,6 +97,11 @@ func saveEmployeeProfile(employee *models.EmployeeCard, id string) error {
 				return err
 			}
 		}
+		// --------- новый код chat: увольнение и очистка табеля сохраняются вместе
+		if err := service.ClearDismissedEmployeeTimeSheets(tx, *employee); err != nil {
+			return err
+		}
+		// --------- конец нового кода chat
 		return service.SyncEmployeeStorage(tx, batch, *employee)
 	})
 	if err == nil {

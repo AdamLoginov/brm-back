@@ -105,7 +105,7 @@ func TestDismissedEmployeeAgreement(t *testing.T) {
 	old := database.DB
 	database.DB = db
 	t.Cleanup(func() { database.DB = old; sqlDB, _ := db.DB(); sqlDB.Close() })
-	if err := db.AutoMigrate(&models.EmployeeCard{}, &models.TimeSheetMonth{}); err != nil {
+	if err := db.AutoMigrate(&models.EmployeeCard{}, &models.TimeSheetMonth{}, &models.TimeSheet{}); err != nil { // новый код chat: таблица для очистки после увольнения
 		t.Fatal(err)
 	}
 	agreement := models.Agreement{}
@@ -135,10 +135,13 @@ func TestDismissedEmployeeAgreement(t *testing.T) {
 		}
 	}
 	aid := strconv.Itoa(int(agreement.ID))
-	call(UpdateEmployeeCardHandler, `{"name":"Иван","status":true,"agreement_id":`+aid+`}`, 200)
+	// --------- новый код chat: дата сохраняется и проверяется
+	call(UpdateEmployeeCardHandler, `{"name":"Иван","status":true,"dismissal_date":"2026-02-30"}`, 400)
+	call(UpdateEmployeeCardHandler, `{"name":"Иван","status":true}`, 400)
+	call(UpdateEmployeeCardHandler, `{"name":"Иван","status":true,"dismissal_date":"2026-11-20","agreement_id":`+aid+`}`, 200)
 	var saved models.EmployeeCard
 	db.First(&saved, employee.ID)
-	if !saved.Status || saved.AgreementID != 0 {
+	if !saved.Status || saved.AgreementID != 0 || saved.DismissalDate != "2026-11-20" {
 		t.Fatalf("dismissed: %+v", saved)
 	}
 	if count := db.Model(&saved).Association("TimeSheetMonths").Count(); count != 1 {
@@ -146,19 +149,20 @@ func TestDismissedEmployeeAgreement(t *testing.T) {
 	}
 	call(PutAgreementEmployeeCard, `{"agreement_id":`+aid+`}`, 400)
 	call(PutAgreementEmployeeCard, `{"agreement_id":0}`, 200)
-	call(CreateEmployeeCardHandler, `{"name":"Анна","status":true,"agreement_id":`+aid+`}`, 200)
+	call(CreateEmployeeCardHandler, `{"name":"Анна","status":true,"dismissal_date":"2026-11-21","agreement_id":`+aid+`}`, 200)
 	var created models.EmployeeCard
 	db.Where("name = ?", "Анна").First(&created)
-	if !created.Status || created.AgreementID != 0 {
+	if !created.Status || created.AgreementID != 0 || created.DismissalDate != "2026-11-21" {
 		t.Fatal("dismissed create kept agreement")
 	}
-	call(UpdateEmployeeCardHandler, `{"name":"Иван","status":false,"agreement_id":0}`, 200)
+	call(UpdateEmployeeCardHandler, `{"name":"Иван","status":false,"dismissal_date":"2026-11-20","agreement_id":0}`, 200)
 	call(PutAgreementEmployeeCard, `{"agreement_id":`+aid+`}`, 200)
 	var restored models.EmployeeCard
 	db.First(&restored, employee.ID)
-	if restored.Status || restored.AgreementID != agreement.ID {
+	if restored.Status || restored.AgreementID != agreement.ID || restored.DismissalDate != "" {
 		t.Fatal("active employee assignment failed")
 	}
+	// --------- конец нового кода chat
 }
 
 // --------- конец нового кода chat
