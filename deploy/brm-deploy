@@ -75,7 +75,7 @@ def main():
                 raise ValueError('Build is missing its entry point')
             if component == 'backend':
                 required.chmod(0o755)
-                run('systemctl', 'start', 'brm-backup.service')
+                # новый код chat: резервирование выполняется снапшотами хостинга
             release = ROOT / 'releases' / f'ci-{component}-{sha[:12]}-{time.time_ns()}'
             release.mkdir()
             shutil.copy2(previous / 'brm', release / 'brm')
