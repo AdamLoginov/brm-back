@@ -66,6 +66,9 @@ func SyncDailyAllowanceAccruals(tx *gorm.DB, monthID uint) error {
 	}
 	keep := []uint{}
 	for _, entry := range entries {
+		if dailyAllowanceDisabled(month, entry.EmployeeCardID) {
+			continue
+		} // новый код chat: отключённым не начисляем
 		if dailyDismissedOn(dismissals[entry.EmployeeCardID], entry.Date) {
 			continue
 		} // новый код chat
@@ -111,6 +114,7 @@ type DailyAllowanceCell struct {
 	PreviewRequiredKopecks int64  `json:"preview_required_kopecks"` // новый код chat: сколько дополнительно выдать для полного покрытия дня
 }
 type DailyAllowanceEmployee struct {
+	Enabled bool `json:"enabled"` // новый код chat: участие в суточных выбранного месяца
 	// --------- новый код chat: увольнение для подсветки сотрудника в месяце табеля
 	Status        bool   `json:"status"`
 	DismissalDate string `json:"dismissal_date"`
@@ -158,6 +162,16 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 			}
 		}
 		result.MonthID = selected.ID
+		// --------- новый код chat: прогноз через другие месяцы учитывает их отключения
+		disabledOn := func(employeeID uint, date string) bool {
+			for _, month := range months {
+				if strings.HasPrefix(date, fmt.Sprintf("%04d-%02d-", month.Year, month.Month)) && dailyAllowanceDisabled(month, employeeID) {
+					return true
+				}
+			}
+			return false
+		}
+		// --------- конец нового кода chat
 		result.Year = selected.Year
 		result.Month = selected.Month
 		result.RateKopecks = selected.DailyAllowanceKopecks
@@ -300,6 +314,9 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 				members[employee.ID] = true
 			}
 			for _, entry := range month.TimeSheets {
+				if dailyAllowanceDisabled(month, entry.EmployeeCardID) {
+					continue
+				} // новый код chat: отключённый месяц не сдвигает прогноз
 				if !members[entry.EmployeeCardID] {
 					continue
 				}
@@ -324,9 +341,10 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 				continue
 			} // новый код chat: история и другие сотрудники договора не расширяют список
 			employee := DailyAllowanceEmployee{EmployeeCardID: id, EmployeeName: name, IsITR: itrMembers[id], IsAssigned: assigned[id], BalanceKopecks: paid[id] - earned[id], Cells: []DailyAllowanceCell{}}
-			employee.Status = dismissalCards[id].Status               // новый код chat
-			employee.DismissalDate = dismissalCards[id].DismissalDate // новый код chat
-			if through != "" && employee.IsAssigned {
+			employee.Enabled = !dailyAllowanceDisabled(selected, id)      // новый код chat
+			employee.Status = dismissalCards[id].Status                   // новый код chat
+			employee.DismissalDate = dismissalCards[id].DismissalDate     // новый код chat
+			if through != "" && employee.IsAssigned && employee.Enabled { // новый код chat
 				if result.RateKopecks <= 0 {
 					return dailyError("Укажите суточные в выбранном табеле")
 				}
@@ -343,6 +361,9 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 				var needed int64
 				for day := start; !day.After(end); day = day.AddDate(0, 0, 1) {
 					date := day.Format("2006-01-02")
+					if disabledOn(id, date) {
+						continue
+					} // новый код chat
 					if dailyDismissedOn(dismissalCards[id], date) {
 						break
 					} // новый код chat: прогноз заканчивается до увольнения
@@ -392,8 +413,11 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 				}
 				start = worked.AddDate(0, 0, 1)
 			}
-			for day := start; !day.After(monthEnd) && employee.IsAssigned; day = day.AddDate(0, 0, 1) { // новый код chat: пороги прогноза также для ещё не обеспеченных дней
+			for day := start; !day.After(monthEnd) && employee.IsAssigned && employee.Enabled; day = day.AddDate(0, 0, 1) { // новый код chat: отключённым не прогнозируем
 				date := day.Format("2006-01-02")
+				if disabledOn(id, date) {
+					continue
+				} // новый код chat
 				if dailyDismissedOn(dismissalCards[id], date) {
 					break
 				} // новый код chat: остаток после увольнения не расходуем
@@ -453,6 +477,9 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 					cell = DailyAllowanceCell{Date: date, State: "dismissed"}
 				}
 				// --------- конец нового кода chat
+				if !employee.Enabled && cell.State != "dismissed" {
+					cell = DailyAllowanceCell{Date: date, State: "empty"}
+				} // новый код chat: никаких сумм отключённым
 				employee.Cells = append(employee.Cells, cell)
 			}
 			result.Employees = append(result.Employees, employee)
@@ -560,6 +587,9 @@ func CreateDailyAllowancePayments(db *gorm.DB, agreementID uint, input DailyAllo
 			return dailyError("Укажите суточные в выбранном табеле")
 		}
 		for _, item := range input.Payments {
+			if dailyAllowanceDisabled(month, item.EmployeeCardID) {
+				return dailyError("Сотрудник отключён от суточных в выбранном табеле")
+			} // новый код chat
 			amount := amounts[item.EmployeeCardID]
 			if amount%month.DailyAllowanceKopecks != 0 {
 				return dailyError("Сумма должна быть кратна суточным выбранного табеля")
@@ -621,6 +651,9 @@ func UpdateDailyAllowancePayment(db *gorm.DB, agreementID, paymentID uint, input
 			if month.DailyAllowanceKopecks <= 0 || amount%month.DailyAllowanceKopecks != 0 {
 				return dailyError("Новая сумма должна быть кратна текущей ставке исходного табеля")
 			}
+			if dailyAllowanceDisabled(month, row.EmployeeCardID) {
+				return dailyError("Сотрудник отключён от суточных: изменение суммы недоступно")
+			} // новый код chat
 		}
 		row.Date = input.Date
 		row.AmountKopecks = amount

@@ -113,6 +113,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/agreements/{id}/payment", middleware.AuthMiddleware(handlers.GetAllPaymentHandler))
 	// --------- новый код chat: суточные и история выдач внутри договора
 	mux.HandleFunc("GET /api/agreements/{id}/daily-allowance", middleware.AuthMiddleware(handlers.DailyAllowanceTableHandler))
+	mux.HandleFunc("PUT /api/agreements/{id}/daily-allowance/list", middleware.AuthMiddleware(handlers.DailyAllowanceListHandler)) // новый код chat
 	mux.HandleFunc("GET /api/agreements/{id}/daily-allowance/payments", middleware.AuthMiddleware(handlers.DailyAllowancePaymentHandler))
 	mux.HandleFunc("POST /api/agreements/{id}/daily-allowance/payments", middleware.AuthMiddleware(handlers.DailyAllowancePaymentHandler))
 	mux.HandleFunc("PUT /api/agreements/{id}/daily-allowance/payments/{paymentId}", middleware.AuthMiddleware(handlers.DailyAllowancePaymentHandler))

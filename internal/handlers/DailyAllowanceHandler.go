@@ -59,6 +59,30 @@ func DailyAllowanceTableHandler(w http.ResponseWriter, r *http.Request) {
 	result, err := service.GetDailyAllowanceTable(database.DB, agreementID, monthID, r.URL.Query().Get("through"), service.DailyAllowanceToday())
 	dailyAllowanceResponse(w, result, err)
 }
+
+// --------- новый код chat: сохранение состава суточных для всех пользователей
+func DailyAllowanceListHandler(w http.ResponseWriter, r *http.Request) {
+	agreementID, err := dailyAllowanceID(r.PathValue("id"))
+	if err != nil {
+		dailyAllowanceResponse(w, nil, err)
+		return
+	}
+	var input struct {
+		MonthID    uint   `json:"month_id"`
+		EnabledIDs []uint `json:"enabled_ids"`
+	}
+	if !decodeDailyAllowance(w, r, &input) {
+		return
+	}
+	if input.MonthID == 0 || input.EnabledIDs == nil {
+		dailyAllowanceResponse(w, nil, service.ErrDailyAllowanceInput)
+		return
+	}
+	err = service.SaveDailyAllowanceList(database.DB, agreementID, input.MonthID, input.EnabledIDs)
+	dailyAllowanceResponse(w, map[string]bool{"saved": err == nil}, err)
+}
+
+// --------- конец нового кода chat
 func DailyAllowancePaymentHandler(w http.ResponseWriter, r *http.Request) {
 	agreementID, err := dailyAllowanceID(r.PathValue("id"))
 	if err != nil {
