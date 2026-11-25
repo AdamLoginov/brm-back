@@ -28,6 +28,7 @@ func InitDB() {
 		&models.StoredFile{},                           // новый код chat: реестр файлов
 		&models.Notification{},                         // новый код chat: уведомления задач
 		&models.SalaryApprovalBatch{},                  // новый код chat: идемпотентное применение выбора
+		&models.SalaryAlimony{},                        // новый код chat: суммы алиментов
 		&models.SalaryPaymentDraft{},                   // --------- новый код chat: индивидуальные выплаты и согласования
 		&models.SalaryDebt{}, &models.SalaryApproval{}, // новый код chat: долги и согласования
 		&models.SalaryBonus{}, // новый код chat: премии за месяц

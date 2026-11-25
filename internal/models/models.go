@@ -138,6 +138,7 @@ type EmployeeCard struct {
 	ShoeSize     string `json:"shoe_size"`
 	HeightCM     *int   `json:"height_cm"`
 	IsITR        bool   `gorm:"not null;default:false" json:"is_itr"`
+	HasAlimony   bool   `gorm:"not null;default:false" json:"has_alimony"` // новый код chat: отметка об алиментах
 	// --------- конец нового кода chat
 	Status            bool                `json:"status"`
 	AgreementID       uint                `json:"agreement_id"`
@@ -453,6 +454,17 @@ type SalaryPaymentDraft struct {
 	AmountKopecks    int64
 	Revision         string
 }
+
+// --------- новый код chat: алименты сотрудника за конкретный табель
+type SalaryAlimony struct {
+	gorm.Model
+	AgreementID      uint  `gorm:"uniqueIndex:idx_salary_alimony;not null"`
+	TimeSheetMonthID uint  `gorm:"uniqueIndex:idx_salary_alimony;not null"`
+	EmployeeCardID   uint  `gorm:"uniqueIndex:idx_salary_alimony;not null"`
+	AmountKopecks    int64 `gorm:"not null;default:0"`
+}
+
+// --------- конец нового кода chat
 
 // --------- новый код chat: повтор массового запроса не повторяет финансовые операции
 type SalaryApprovalBatch struct {

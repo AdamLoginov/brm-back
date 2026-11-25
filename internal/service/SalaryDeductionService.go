@@ -9,14 +9,17 @@ import (
 type SalaryAccrualWithDeduction struct {
 	SalaryAccrualWithPenalties
 	OfficiallyEmployed   bool  `json:"officially_employed"`
+	HasAlimony           bool  `json:"has_alimony"` // новый код chat: справочная отметка из профиля
 	MonthlySalaryKopecks int64 `json:"monthly_salary_kopecks"`
 	DeductionKopecks     int64 `json:"deduction_kopecks"`
+	AlimonyKopecks       int64 `json:"alimony_kopecks"` // новый код chat
 }
 
 type SalaryDeductionSummary struct {
 	SalaryPenaltySummary
 	Accruals              []SalaryAccrualWithDeduction `json:"accruals"`
 	TotalDeductionKopecks int64                        `json:"total_deduction_kopecks"`
+	TotalAlimonyKopecks   int64                        `json:"total_alimony_kopecks"` // новый код chat
 }
 
 func AddSalaryDeductions(db *gorm.DB, summary SalaryPenaltySummary) (SalaryDeductionSummary, error) {
@@ -30,7 +33,7 @@ func AddSalaryDeductions(db *gorm.DB, summary SalaryPenaltySummary) (SalaryDeduc
 	}
 	var employees []models.EmployeeCard
 	// Сотрудник мог перейти в другой договор или быть удалён после создания табеля.
-	if err := db.Unscoped().Select("id", "officially_employed", "monthly_salary_kopecks").Where("id IN ?", ids).Find(&employees).Error; err != nil {
+	if err := db.Unscoped().Select("id", "officially_employed", "monthly_salary_kopecks", "has_alimony").Where("id IN ?", ids).Find(&employees).Error; err != nil { // новый код chat: загружаем отметку об алиментах
 		return result, err
 	}
 	byID := map[uint]models.EmployeeCard{}
@@ -43,6 +46,7 @@ func AddSalaryDeductions(db *gorm.DB, summary SalaryPenaltySummary) (SalaryDeduc
 			return result, gorm.ErrRecordNotFound
 		}
 		item := SalaryAccrualWithDeduction{SalaryAccrualWithPenalties: row, OfficiallyEmployed: employee.OfficiallyEmployed}
+		item.HasAlimony = employee.HasAlimony // новый код chat: без изменения денежных сумм
 		if employee.OfficiallyEmployed {
 			amount := employee.MonthlySalaryKopecks
 			if amount < 0 || amount > maxSalaryKopecks {
@@ -59,6 +63,20 @@ func AddSalaryDeductions(db *gorm.DB, summary SalaryPenaltySummary) (SalaryDeduc
 		item.PayableKopecks -= deduction
 		result.TotalDeductionKopecks += deduction
 		result.TotalPayableKopecks -= deduction
+		// --------- новый код chat: алименты удерживаются отдельно от вычета 13%
+		var err error
+		item.AlimonyKopecks, err = salaryAlimonyAmount(db, item)
+		if err != nil {
+			return result, err
+		}
+		alimony := item.AlimonyKopecks
+		if alimony > maxSalaryKopecks-result.TotalAlimonyKopecks || item.PayableKopecks < -maxSalaryKopecks+alimony || result.TotalPayableKopecks < -maxSalaryKopecks+alimony {
+			return result, ErrSalaryAmountOverflow
+		}
+		item.PayableKopecks -= alimony
+		result.TotalAlimonyKopecks += alimony
+		result.TotalPayableKopecks -= alimony
+		// --------- конец нового кода chat
 		result.Accruals = append(result.Accruals, item)
 	}
 	return result, nil

@@ -125,6 +125,7 @@ func recountEmployeeSalary(s *SalaryDebtSummary) error {
 	s.TotalAdvancesKopecks = 0
 	s.TotalPenaltiesKopecks = 0
 	s.TotalDeductionKopecks = 0
+	s.TotalAlimonyKopecks = 0 // новый код chat
 	s.TotalExpensesKopecks = 0
 	s.TotalBonusesKopecks = 0
 	s.TotalCompanyDebtKopecks = 0
@@ -139,6 +140,7 @@ func recountEmployeeSalary(s *SalaryDebtSummary) error {
 			total *int64
 			value int64
 		}{
+			{&s.TotalAlimonyKopecks, r.AlimonyKopecks}, // новый код chat
 			{&s.TotalKopecks, r.AmountKopecks}, {&s.TotalAdvancesKopecks, r.AdvancesKopecks}, {&s.TotalPenaltiesKopecks, r.PenaltiesKopecks},
 			{&s.TotalDeductionKopecks, r.DeductionKopecks}, {&s.TotalExpensesKopecks, r.ExpensesKopecks}, {&s.TotalBonusesKopecks, r.BonusesKopecks},
 			{&s.TotalCompanyDebtKopecks, r.CompanyDebtKopecks}, {&s.TotalEmployeeDebtKopecks, r.EmployeeDebtKopecks}, {&s.TotalPayableKopecks, r.PayableKopecks}, {&s.TotalPaymentKopecks, r.PaymentKopecks},
@@ -155,10 +157,11 @@ func recountEmployeeSalary(s *SalaryDebtSummary) error {
 }
 
 type SalaryPaymentDraftInput struct {
-	EmployeeCardID uint   `json:"employee_card_id"`
-	Revision       string `json:"revision"`
-	Amount         string `json:"amount"`
-	Reset          bool   `json:"reset"`
+	EmployeeCardID uint    `json:"employee_card_id"`
+	Revision       string  `json:"revision"`
+	Amount         string  `json:"amount"`
+	Reset          bool    `json:"reset"`
+	AlimonyAmount  *string `json:"alimony_amount"` // новый код chat: отсутствие поля сохраняет прежнее значение
 }
 
 func SaveSalaryPaymentDraft(db *gorm.DB, agreementID, monthID uint, input SalaryPaymentDraftInput) (SalaryDebtSummary, error) {
@@ -178,6 +181,23 @@ func SaveSalaryPaymentDraft(db *gorm.DB, agreementID, monthID uint, input Salary
 				return ErrSalaryApprovalConflict
 			}
 			query := tx.Unscoped().Where("agreement_id = ? AND time_sheet_month_id = ? AND employee_card_id = ?", agreementID, monthID, input.EmployeeCardID)
+			// --------- новый код chat: обе суммы сохраняются в одной транзакции
+			if !input.Reset && input.AlimonyAmount != nil {
+				if err = saveSalaryAlimony(tx, r, *input.AlimonyAmount); err != nil {
+					return err
+				}
+				updated, e := employeeSalaryCalculation(tx, agreementID, monthID, false)
+				if e != nil {
+					return e
+				}
+				for _, item := range updated.Accruals {
+					if item.EmployeeCardID == r.EmployeeCardID {
+						r = item
+						break
+					}
+				}
+			}
+			// --------- конец нового кода chat
 			if input.Reset {
 				err = query.Delete(&models.SalaryPaymentDraft{}).Error
 			} else {

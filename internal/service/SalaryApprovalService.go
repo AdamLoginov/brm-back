@@ -72,7 +72,30 @@ func GetSalaryCalculation(db *gorm.DB, agreementID, monthID uint, calculate bool
 		// --------- новый код chat: индивидуальные выплаты и согласования
 		var err error
 		result, err = employeeSalaryCalculation(tx, agreementID, monthID, calculate)
-		return err
+		if err != nil {
+			return err
+		}
+		// --------- новый код chat: актуальная отметка профиля для сохранённых и новых начислений
+		ids := make([]uint, 0, len(result.Accruals))
+		for _, row := range result.Accruals {
+			ids = append(ids, row.EmployeeCardID)
+		}
+		if len(ids) == 0 {
+			return nil
+		}
+		var employees []models.EmployeeCard
+		if err := tx.Unscoped().Select("id", "has_alimony").Where("id IN ?", ids).Find(&employees).Error; err != nil {
+			return err
+		}
+		alimonyByEmployee := make(map[uint]bool, len(employees))
+		for _, employee := range employees {
+			alimonyByEmployee[employee.ID] = employee.HasAlimony
+		}
+		for i := range result.Accruals {
+			result.Accruals[i].HasAlimony = alimonyByEmployee[result.Accruals[i].EmployeeCardID]
+		}
+		return nil
+		// --------- конец нового кода chat
 	})
 	return result, err
 }

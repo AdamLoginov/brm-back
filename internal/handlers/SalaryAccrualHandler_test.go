@@ -24,7 +24,7 @@ func TestSalaryAccrualAPIAndMonthDeletion(t *testing.T) {
 	previousDB := database.DB
 	database.DB = db
 	t.Cleanup(func() { database.DB = previousDB; sqlDB, _ := db.DB(); sqlDB.Close() })
-	if err := db.AutoMigrate(&models.Agreement{}, &models.EmployeeCard{}, &models.TimeSheetMonth{}, &models.TimeSheet{}, &models.SalaryAccrual{}, &models.SalaryAdvance{}, &models.SalaryPenalty{}, &models.DailyAllowanceAccrual{}, &models.Expenses{}, &models.SalaryBonus{}, &models.SalaryDebt{}, &models.SalaryApproval{}, &models.SalaryPaymentDraft{}, &models.SalaryApprovalBatch{}); err != nil { // новый код chat: авансы в тестовой БД
+	if err := db.AutoMigrate(&models.SalaryAlimony{}, &models.Agreement{}, &models.EmployeeCard{}, &models.TimeSheetMonth{}, &models.TimeSheet{}, &models.SalaryAccrual{}, &models.SalaryAdvance{}, &models.SalaryPenalty{}, &models.DailyAllowanceAccrual{}, &models.Expenses{}, &models.SalaryBonus{}, &models.SalaryDebt{}, &models.SalaryApproval{}, &models.SalaryPaymentDraft{}, &models.SalaryApprovalBatch{}); err != nil { // новый код chat: авансы в тестовой БД
 		t.Fatal(err)
 	}
 	agreement := models.Agreement{Name: "Договор", Number: "1"}
