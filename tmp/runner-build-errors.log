@@ -1,5 +1,0 @@
-# project/internal/service
-internal\service\DailyAllowanceService.go:69:6: undefined: dailyAllowanceDisabled
-internal\service\DailyAllowanceService.go:329:24: undefined: dailyAllowanceDisabled
-internal\service\DailyAllowanceService.go:566:7: undefined: dailyAllowanceDisabled
-internal\service\DailyAllowanceService.go:628:7: undefined: dailyAllowanceDisabled

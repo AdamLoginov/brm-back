@@ -664,6 +664,26 @@ func UpdateDailyAllowancePayment(db *gorm.DB, agreementID, paymentID uint, input
 	})
 	return row, err
 }
+
+// --------- новый код chat: атомарное удаление выдач выбранной даты только внутри договора
+func DeleteDailyAllowancePaymentsByDate(db *gorm.DB, agreementID uint, date string) (int64, error) {
+	if !validDailyPaymentDate(date) {
+		return 0, ErrDailyAllowanceInput
+	}
+	var deleted int64
+	err := db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.First(&models.Agreement{}, agreementID).Error; err != nil {
+			return err
+		}
+		result := tx.Where("agreement_id = ? AND date = ?", agreementID, date).Delete(&models.DailyAllowancePayment{})
+		deleted = result.RowsAffected
+		return result.Error
+	})
+	return deleted, err
+}
+
+// --------- конец нового кода chat
+
 func DeleteDailyAllowancePayment(db *gorm.DB, agreementID, paymentID uint) error {
 	return db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.First(&models.Agreement{}, agreementID).Error; err != nil {

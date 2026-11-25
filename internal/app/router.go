@@ -118,6 +118,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/agreements/{id}/daily-allowance/payments", middleware.AuthMiddleware(handlers.DailyAllowancePaymentHandler))
 	mux.HandleFunc("PUT /api/agreements/{id}/daily-allowance/payments/{paymentId}", middleware.AuthMiddleware(handlers.DailyAllowancePaymentHandler))
 	mux.HandleFunc("DELETE /api/agreements/{id}/daily-allowance/payments/{paymentId}", middleware.AuthMiddleware(handlers.DailyAllowancePaymentHandler))
+	mux.HandleFunc("DELETE /api/agreements/{id}/daily-allowance/payments/by-date/{date}", middleware.AuthMiddleware(handlers.DailyAllowancePaymentDateHandler)) // новый код chat: все выдачи за дату
 	// --------- конец нового кода chat
 	// --------- новый код chat: просмотр и пересчёт начислений выбранного табеля
 	mux.HandleFunc("GET /api/agreements/{id}/timesheetmonth/{monthId}/accruals", middleware.AuthMiddleware(handlers.GetSalaryAccrualHandler))

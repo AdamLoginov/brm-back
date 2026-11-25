@@ -83,6 +83,19 @@ func DailyAllowanceListHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // --------- конец нового кода chat
+// --------- новый код chat: удаление всех выдач за день одной транзакцией
+func DailyAllowancePaymentDateHandler(w http.ResponseWriter, r *http.Request) {
+	agreementID, err := dailyAllowanceID(r.PathValue("id"))
+	if err != nil {
+		dailyAllowanceResponse(w, nil, err)
+		return
+	}
+	count, err := service.DeleteDailyAllowancePaymentsByDate(database.DB, agreementID, r.PathValue("date"))
+	dailyAllowanceResponse(w, map[string]int64{"deleted_count": count}, err)
+}
+
+// --------- конец нового кода chat
+
 func DailyAllowancePaymentHandler(w http.ResponseWriter, r *http.Request) {
 	agreementID, err := dailyAllowanceID(r.PathValue("id"))
 	if err != nil {
