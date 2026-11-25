@@ -183,6 +183,26 @@ func NewRouter() http.Handler {
 
 	// tools
 	mux.HandleFunc("POST /api/tools/create", middleware.AuthMiddleware(handlers.CreateToolHandler))
+	mux.HandleFunc("GET /api/tools", middleware.AuthMiddleware(handlers.GetAgreementAllToolHandler)) // новый код chat: общий список МТР
+	// --------- новый код chat: общий и договорный учёт СИЗ
+	mux.HandleFunc("GET /api/ppe", middleware.AuthMiddleware(handlers.ListPpe))
+	mux.HandleFunc("GET /api/agreements/{id}/ppe", middleware.AuthMiddleware(handlers.ListPpe))
+	mux.HandleFunc("POST /api/ppe", middleware.AuthMiddleware(handlers.SavePpe))
+	mux.HandleFunc("PUT /api/ppe/{id}", middleware.AuthMiddleware(handlers.SavePpe))
+	mux.HandleFunc("DELETE /api/ppe/{id}", middleware.AuthMiddleware(handlers.DeletePpe))
+	// --------- конец нового кода chat
+	// --------- новый код chat: расходники и общий справочник категорий
+	mux.HandleFunc("GET /api/consumables", middleware.AuthMiddleware(handlers.ListConsumables))
+	mux.HandleFunc("GET /api/agreements/{id}/consumables", middleware.AuthMiddleware(handlers.ListConsumables))
+	mux.HandleFunc("POST /api/consumables", middleware.AuthMiddleware(handlers.SaveConsumable))
+	mux.HandleFunc("PUT /api/consumables/{id}", middleware.AuthMiddleware(handlers.SaveConsumable))
+	mux.HandleFunc("DELETE /api/consumables/{id}", middleware.AuthMiddleware(handlers.DeleteConsumable))
+	mux.HandleFunc("GET /api/consumable-categories", middleware.AuthMiddleware(handlers.ListConsumableCategories))
+	mux.HandleFunc("POST /api/consumable-categories", middleware.AuthMiddleware(handlers.SaveConsumableCategory))
+	mux.HandleFunc("PATCH /api/consumable-categories/{id}", middleware.AuthMiddleware(handlers.SaveConsumableCategory))
+	mux.HandleFunc("DELETE /api/consumable-categories/{id}", middleware.AuthMiddleware(handlers.DeleteConsumableCategory))
+	// --------- конец нового кода chat
+	mux.HandleFunc("PUT /api/tools/{id}", middleware.AuthMiddleware(handlers.UpdateToolHandler)) // новый код chat: редактирование инструмента
 	mux.HandleFunc("DELETE /api/tools/delete/{id}", middleware.AuthMiddleware(handlers.DeleteToolHandler))
 	mux.HandleFunc("GET /api/agreements/{id}/tools/create", middleware.AuthMiddleware(handlers.GetAgreementAllToolHandler))
 

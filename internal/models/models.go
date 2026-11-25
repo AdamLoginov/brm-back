@@ -534,12 +534,50 @@ type Expenses struct {
 
 type Tool struct {
 	gorm.Model
+	// --------- новый код chat: ответственный и сроки проверки инструмента
+	EmployeeCardID     *uint         `gorm:"index" json:"employee_card_id"`
+	EmployeeCard       *EmployeeCard `gorm:"foreignKey:EmployeeCardID" json:"employee_card"`
+	InspectionDate     string        `json:"inspection_date"`
+	NextInspectionDate string        `json:"next_inspection_date"`
+	// --------- конец нового кода chat
 	AgreementID  uint   `json:"agreement_id"`
 	Name         string `json:"name"`
 	InvNumber    string `json:"inv_number"`
 	SerialNumber string `json:"serial_number"`
 	Status       string `json:"status"`
 }
+
+// --------- новый код chat: расходники МТР и общий справочник категорий
+type ConsumableCategory struct {
+	gorm.Model
+	Name    string `json:"name"`
+	NameKey string `gorm:"uniqueIndex:idx_consumable_category_name,where:deleted_at IS NULL" json:"-"`
+}
+
+// --------- новый код chat: одна запись СИЗ — одна вещь, цена в копейках
+type Ppe struct {
+	gorm.Model
+	Name           string        `json:"name"`
+	Size           string        `json:"size"`
+	Category       string        `json:"category"`
+	PriceKopecks   int64         `json:"price_kopecks"`
+	AgreementID    uint          `gorm:"index" json:"agreement_id"`
+	EmployeeCardID *uint         `gorm:"index" json:"employee_card_id"`
+	EmployeeCard   *EmployeeCard `gorm:"foreignKey:EmployeeCardID" json:"employee_card"`
+}
+
+// --------- конец нового кода chat
+
+type Consumable struct {
+	gorm.Model
+	Name        string `json:"name"`
+	AddedDate   string `json:"added_date"`
+	Quantity    int64  `json:"quantity"`
+	AgreementID *uint  `gorm:"index" json:"agreement_id"`
+	CategoryID  *uint  `gorm:"index" json:"category_id"`
+}
+
+// --------- конец нового кода chat
 
 type Task struct {
 	DueDate string `gorm:"default:''" json:"due_date"` // новый код chat: дата включительно, без времени; пусто — без срока

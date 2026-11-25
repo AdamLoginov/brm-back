@@ -51,6 +51,8 @@ func InitDB() {
 		&models.Expenses{},
 		&models.ExpenseCategory{}, // новый код chat: общие категории расходов
 		&models.Tool{},
+		&models.Ppe{},                                      // новый код chat: средства индивидуальной защиты
+		&models.Consumable{}, &models.ConsumableCategory{}, // новый код chat: расходники МТР
 		&models.TimeSheet{},
 		&models.TimeSheetMonth{},
 		&models.SalaryAccrual{},         // новый код chat: таблица начислений

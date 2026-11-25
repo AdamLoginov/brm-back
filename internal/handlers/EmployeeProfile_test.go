@@ -23,7 +23,7 @@ func TestEmployeeProfileAPI(t *testing.T) {
 	old := database.DB
 	database.DB = db
 	t.Cleanup(func() { database.DB = old; sqlDB, _ := db.DB(); sqlDB.Close() })
-	if err := db.AutoMigrate(&models.EmployeeCard{}); err != nil {
+	if err := db.AutoMigrate(&models.EmployeeCard{}, &models.Tool{}, &models.Ppe{}); err != nil { // новый код chat: инструменты и СИЗ
 		t.Fatal(err)
 	}
 	call := func(handler http.HandlerFunc, id, body string, status int) *httptest.ResponseRecorder {
@@ -105,7 +105,7 @@ func TestDismissedEmployeeAgreement(t *testing.T) {
 	old := database.DB
 	database.DB = db
 	t.Cleanup(func() { database.DB = old; sqlDB, _ := db.DB(); sqlDB.Close() })
-	if err := db.AutoMigrate(&models.EmployeeCard{}, &models.TimeSheetMonth{}, &models.TimeSheet{}); err != nil { // новый код chat: таблица для очистки после увольнения
+	if err := db.AutoMigrate(&models.EmployeeCard{}, &models.TimeSheetMonth{}, &models.TimeSheet{}, &models.Tool{}, &models.Ppe{}); err != nil { // новый код chat: очистка табеля, инструментов и СИЗ
 		t.Fatal(err)
 	}
 	agreement := models.Agreement{}
@@ -135,6 +135,15 @@ func TestDismissedEmployeeAgreement(t *testing.T) {
 		}
 	}
 	aid := strconv.Itoa(int(agreement.ID))
+	// новый код chat: увольнение снимает закрепление инструмента
+	tool := models.Tool{Name: "Дрель", AgreementID: agreement.ID, EmployeeCardID: &employee.ID}
+	ppe := models.Ppe{Name: "Куртка", AgreementID: agreement.ID, EmployeeCardID: &employee.ID} // новый код chat
+	if err := db.Create(&ppe).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&tool).Error; err != nil {
+		t.Fatal(err)
+	}
 	// --------- новый код chat: дата сохраняется и проверяется
 	call(UpdateEmployeeCardHandler, `{"name":"Иван","status":true,"dismissal_date":"2026-02-30"}`, 400)
 	call(UpdateEmployeeCardHandler, `{"name":"Иван","status":true}`, 400)
@@ -143,6 +152,20 @@ func TestDismissedEmployeeAgreement(t *testing.T) {
 	db.First(&saved, employee.ID)
 	if !saved.Status || saved.AgreementID != 0 || saved.DismissalDate != "2026-11-20" {
 		t.Fatalf("dismissed: %+v", saved)
+	}
+	var detachedTool models.Tool // новый код chat
+	if err := db.First(&detachedTool, tool.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if detachedTool.EmployeeCardID != nil {
+		t.Fatal("dismissal kept tool assignment")
+	}
+	var detachedPpe models.Ppe // новый код chat: увольнение снимает и СИЗ
+	if err := db.First(&detachedPpe, ppe.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if detachedPpe.EmployeeCardID != nil {
+		t.Fatal("dismissal kept PPE assignment")
 	}
 	if count := db.Model(&saved).Association("TimeSheetMonths").Count(); count != 1 {
 		t.Fatal("historical timesheet link lost")

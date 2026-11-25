@@ -243,7 +243,18 @@ func PutAgreementEmployeeCard(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Уволенного сотрудника нельзя закрепить за договором", http.StatusBadRequest)
 		return
 	}
-	if err := database.DB.Model(&employee).Update("agreement_id", input.AgreementID).Error; err != nil {
+	// --------- новый код chat: перевод и снятие ответственного выполняются вместе
+	if err := database.DB.Transaction(func(tx *gorm.DB) error {
+		if employee.AgreementID != input.AgreementID {
+			if err := tx.Model(&models.Tool{}).Where("employee_card_id = ?", employee.ID).Update("employee_card_id", nil).Error; err != nil {
+				return err
+			}
+			if err := tx.Model(&models.Ppe{}).Where("employee_card_id = ?", employee.ID).Update("employee_card_id", nil).Error; err != nil { // новый код chat: СИЗ открепляется при переводе
+				return err
+			}
+		}
+		return tx.Model(&employee).Update("agreement_id", input.AgreementID).Error
+	}); err != nil {
 		http.Error(w, "Не удалось изменить договор сотрудника", http.StatusInternalServerError)
 		return
 	}

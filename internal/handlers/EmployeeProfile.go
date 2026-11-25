@@ -86,6 +86,15 @@ func saveEmployeeProfile(employee *models.EmployeeCard, id string) error {
 				return err
 			}
 			employee.ID = uint(key)
+			// новый код chat: увольнение или смена договора снимают все закрепления инструментов
+			if employee.Status || existing.AgreementID != employee.AgreementID {
+				if err := tx.Model(&models.Tool{}).Where("employee_card_id = ?", key).Update("employee_card_id", nil).Error; err != nil {
+					return err
+				}
+				if err := tx.Model(&models.Ppe{}).Where("employee_card_id = ?", key).Update("employee_card_id", nil).Error; err != nil { // новый код chat: снятие закрепления СИЗ
+					return err
+				}
+			}
 			if err := tx.Model(&models.EmployeeCard{}).Where("id = ?", key).Select("*").
 				Omit("id", "created_at", "updated_at", "agreement", "employee_documents", "Specializations", "TimeSheetMonths").
 				Updates(employee).Error; err != nil {
