@@ -130,8 +130,10 @@ type EmployeeCard struct {
 	Profession       *string `json:"profession"`
 	SalaryRate       string  `json:"salary_rate"`
 	// --------- новый код chat: официальное трудоустройство и месячная зарплата в копейках
-	OfficiallyEmployed   bool  `gorm:"not null;default:false" json:"officially_employed"`
-	MonthlySalaryKopecks int64 `gorm:"not null;default:0" json:"monthly_salary_kopecks"`
+	OfficiallyEmployed    bool   `gorm:"not null;default:false" json:"officially_employed"`
+	EmploymentOrderNumber string `json:"employment_order_number"` // новый код chat: номер приказа, допускаются буквы и символы
+	EmploymentOrderDate   string `json:"employment_order_date"`   // новый код chat: необязательная дата приказа
+	MonthlySalaryKopecks  int64  `gorm:"not null;default:0" json:"monthly_salary_kopecks"`
 	// --------- конец нового кода chat
 	// --------- новый код chat: размеры сотрудника и принадлежность к ИТР
 	ClothingSize string `json:"clothing_size"`

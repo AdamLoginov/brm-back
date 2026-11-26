@@ -18,6 +18,15 @@ import (
 var employeeProfileMutex sync.Mutex
 
 func saveEmployeeProfile(employee *models.EmployeeCard, id string) error {
+	// новый код chat: реквизиты приказа необязательны и сохраняются независимо от официального статуса
+	employee.EmploymentOrderNumber = strings.TrimSpace(employee.EmploymentOrderNumber)
+	employee.EmploymentOrderDate = strings.TrimSpace(employee.EmploymentOrderDate)
+	if employee.EmploymentOrderDate != "" {
+		date, err := time.Parse("2006-01-02", employee.EmploymentOrderDate)
+		if err != nil || date.Year() < 1 {
+			return errors.New("Укажите корректную дату приказа")
+		}
+	}
 	// --------- новый код chat: дата обязательна при сохранении уволенного сотрудника
 	if employee.Status {
 		if _, err := time.Parse("2006-01-02", employee.DismissalDate); err != nil {
