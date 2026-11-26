@@ -57,6 +57,7 @@ func CreateUserHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user.Password = string(hash)
+	user.LastActiveAt = nil // новый код chat: время посещения нельзя назначить при создании пользователя
 	if err := database.DB.Create(&user).Error; err != nil {
 		log.Println("[ERROR] Ошибка при создании пользователя")
 		http.Error(w, "Ошибка при создании пользователя", http.StatusBadRequest)

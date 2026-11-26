@@ -17,6 +17,12 @@ import (
 
 const sessionLifetime = 72 * time.Hour // новый код chat: три дня без активности
 
+// новый код chat: только вход и запрос активности обновляют посещение; фоновые API его не меняют
+func recordUserActivity(userID uint) error {
+	now := time.Now().UTC()
+	return database.DB.Model(&models.User{}).Where("id = ? AND (last_active_at IS NULL OR last_active_at < ?)", userID, now).UpdateColumn("last_active_at", now).Error
+}
+
 func GenerateToken(userID uint, login string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"user_id": userID,
@@ -63,6 +69,10 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// новый код chat: API по-прежнему получает Bearer, а файлы — отдельную cookie
+	if err := recordUserActivity(user.ID); err != nil { // новый код chat: успешный вход на сайт
+		http.Error(w, "Не удалось сохранить активность пользователя", http.StatusInternalServerError)
+		return
+	}
 	if err := service.SetFileCookie(w, r, user.ID, time.Now().Add(sessionLifetime)); err != nil { // новый код chat
 		http.Error(w, "Cookie error", 500)
 		return
@@ -97,6 +107,10 @@ func RefreshSessionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := service.SetFileCookie(w, r, user.ID, time.Now().Add(sessionLifetime)); err != nil {
 		http.Error(w, "Cookie error", http.StatusInternalServerError)
+		return
+	}
+	if err := recordUserActivity(user.ID); err != nil { // новый код chat: активность действующей сессии
+		http.Error(w, "Не удалось сохранить активность пользователя", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")

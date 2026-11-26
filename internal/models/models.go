@@ -244,6 +244,7 @@ type Payment struct {
 
 type User struct {
 	gorm.Model
+	LastActiveAt   *time.Time   `json:"last_active_at"` // новый код chat: последнее посещение, неизвестное время — NULL
 	Login          string       `gorm:"not null" json:"login"`
 	Password       string       `gorm:"not null" json:"password"`
 	EmployeeCardID uint         `json:"employee_card_id"`
