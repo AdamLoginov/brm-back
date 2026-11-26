@@ -54,6 +54,7 @@ func NewRouter() http.Handler {
 	// --------- конец нового кода chat
 	mux.HandleFunc("GET /api/employeecards", middleware.AuthMiddleware(handlers.GetAllEmployeeCardHandler))
 	mux.HandleFunc("GET /api/employeescard/{id}/detail", middleware.AuthMiddleware(handlers.GetEmployeeCardDetailHandler))
+	mux.HandleFunc("GET /api/employeescard/{id}/statistics", middleware.AuthMiddleware(handlers.EmployeeStatisticsHandler)) // новый код chat: статистика за год
 	mux.HandleFunc("GET /api/employeescard/document/{id}/detail", middleware.AuthMiddleware(handlers.GetEmployeeCardDocumentDetailHandler))
 	mux.HandleFunc("GET /api/employeescard/document/category", middleware.AuthMiddleware(handlers.GetAllCategoryEmployeeDocumentHandler))
 	mux.HandleFunc("POST /api/employeescard/document/category/create", middleware.AuthMiddleware(handlers.CreateCategoryEmployeeDocumentHandler))
