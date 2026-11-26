@@ -122,7 +122,7 @@ func TestTimeSheetSettingsAPI(t *testing.T) {
 	if w := call(UpdateTimeSheetMonthHandler, strings.Replace(update, fmt.Sprintf(`[%d]`, employee.ID), `[]`, 1), ""); w.Code != 200 {
 		t.Fatal(w.Body.String())
 	}
-	check(0)
+	check(50000) // новый код chat: скрытие сотрудника сохраняет отметки и штрафы
 	if w := call(UpdateTimeSheetMonthHandler, update, ""); w.Code != 200 {
 		t.Fatal(w.Body.String())
 	}

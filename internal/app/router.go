@@ -105,6 +105,8 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("DELETE /api/agreements/timesheet/delete", middleware.AuthMiddleware(handlers.DeleteTimeSheetHandler))
 
 	mux.HandleFunc("GET /api/agreements/{id}/timesheetmonth", middleware.AuthMiddleware(handlers.GetAllTimeSheetMonthHandler))
+	mux.HandleFunc("GET /api/agreements/{id}/timesheetmonth/{monthId}/employees", middleware.AuthMiddleware(handlers.TimeSheetEmployeeListHandler)) // новый код chat
+	mux.HandleFunc("PUT /api/agreements/{id}/timesheetmonth/{monthId}/employees", middleware.AuthMiddleware(handlers.TimeSheetEmployeeListHandler)) // новый код chat
 	mux.HandleFunc("GET /api/agreements/timesheetmonth/detail/{id}", middleware.AuthMiddleware(handlers.GetDetailTimeSheetMonthHandler))
 	mux.HandleFunc("POST /api/agreements/timesheetmonth/update", middleware.AuthMiddleware(handlers.UpdateTimeSheetMonthHandler))
 	mux.HandleFunc("POST /api/agreements/timesheetmonth/create", middleware.AuthMiddleware(handlers.CreateTimeSheetMonthHandler))

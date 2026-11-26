@@ -184,6 +184,7 @@ type EmployeeDocuments struct {
 type TimeSheetMonth struct {
 	gorm.Model
 	DailyAllowanceDisabledIDs []uint `gorm:"serializer:json" json:"daily_allowance_disabled_ids"` // новый код chat: отключённые суточные в этом месяце
+	HiddenEmployeeIDs         []uint `gorm:"serializer:json" json:"hidden_employee_ids"`          // новый код chat: скрытие строк без удаления отметок и зарплаты
 	// --------- новый код chat: настройки месячного табеля, точные десятичные часы
 	ShiftHours            string `gorm:"not null;default:12" json:"shift_hours"`
 	AbsencePenaltyKopecks int64  `gorm:"not null;default:0" json:"absence_penalty_kopecks"`

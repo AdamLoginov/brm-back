@@ -337,7 +337,7 @@ func GetDailyAllowanceTable(db *gorm.DB, agreementID, monthID uint, through stri
 		}
 		// --------- конец нового кода chat
 		for id, name := range people {
-			if !tableMembers[id] {
+			if !tableMembers[id] || TimeSheetEmployeeHidden(selected, id) { // новый код chat: только видимые сотрудники рабочего табеля
 				continue
 			} // новый код chat: история и другие сотрудники договора не расширяют список
 			employee := DailyAllowanceEmployee{EmployeeCardID: id, EmployeeName: name, IsITR: itrMembers[id], IsAssigned: assigned[id], BalanceKopecks: paid[id] - earned[id], Cells: []DailyAllowanceCell{}}

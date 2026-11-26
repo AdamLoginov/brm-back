@@ -157,7 +157,7 @@ func UpdateTimeSheetMonthHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := database.DB.First(&timeSheetMonth, input.TimeSheetMonthId).Error; err != nil {
+	if err := database.DB.Preload("Employees").First(&timeSheetMonth, input.TimeSheetMonthId).Error; err != nil { // новый код chat: настройки сохраняют полный состав
 		msg := "[Error] Ошибка при поиске табеля по ID"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)
@@ -171,6 +171,14 @@ func UpdateTimeSheetMonthHandler(w http.ResponseWriter, r *http.Request) {
 		return // новый код chat: прервать сохранение после ошибки
 	}
 
+	// новый код chat: без списка обновляем только настройки, скрытых сотрудников не исключаем из зарплаты
+	if input.EmployeesIds == nil {
+		for _, employee := range timeSheetMonth.Employees {
+			if !service.TimeSheetEmployeeHidden(timeSheetMonth, employee.ID) {
+				employees = append(employees, employee)
+			}
+		}
+	}
 	// --------- новый код chat: дата увольнения проверяется и при изменении табеля
 	if err := validateTimeSheetEmployeeDates(employees, input.Year, input.Month); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
@@ -194,8 +202,11 @@ func UpdateTimeSheetMonthHandler(w http.ResponseWriter, r *http.Request) {
 		if err := tx.Model(&timeSheetMonth).Updates(map[string]interface{}{"month": input.Month, "year": input.Year, "shift_hours": shiftHours, "absence_penalty_kopecks": penalty, "daily_allowance_kopecks": dailyAllowance}).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&timeSheetMonth).Association("Employees").Replace(&employees); err != nil {
-			return err
+		// новый код chat: старый запрос со списком тоже скрывает строки вместо удаления состава
+		if input.EmployeesIds != nil {
+			if err := service.SaveTimeSheetEmployeeList(tx, timeSheetMonth.AgreementID, timeSheetMonth.ID, input.EmployeesIds); err != nil {
+				return err
+			}
 		}
 		// --------- новый код chat: обновление суточных при изменении ставки или сотрудников
 		if err := service.SyncTimeSheetPenalties(tx, timeSheetMonth.ID); err != nil {
