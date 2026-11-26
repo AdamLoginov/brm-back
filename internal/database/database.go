@@ -65,6 +65,10 @@ func InitDB() {
 		&models.Task{},
 	)
 	// --------- новый код chat: перенос назначений после обновления схемы
+	// новый код chat: старый отпуск заменён отсутствием на объекте; суммы не меняются
+	if err := DB.Unscoped().Model(&models.TimeSheet{}).Where("status = ?", "О").UpdateColumn("status", "Н").Error; err != nil {
+		panic(err)
+	}
 	if err := migrateTaskAssignees(DB); err != nil {
 		panic(err)
 	}
