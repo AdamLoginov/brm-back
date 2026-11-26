@@ -125,6 +125,13 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("POST /api/agreements/{id}/timesheetmonth/{monthId}/accruals/calculate", middleware.AuthMiddleware(handlers.CalculateSalaryAccrualHandler))
 	// --------- новый код chat: маршруты авансов договора
 	mux.HandleFunc("GET /api/agreements/{id}/advances", middleware.AuthMiddleware(handlers.SalaryAdvanceHandler))
+	// --------- новый код chat: алименты сотрудника, договор задаёт только область просмотра
+	mux.HandleFunc("GET /api/agreements/{id}/alimony", middleware.AuthMiddleware(handlers.SalaryAlimonyHandler))
+	mux.HandleFunc("GET /api/agreements/{id}/alimony/employees", middleware.AuthMiddleware(handlers.SalaryAlimonyEmployeesHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/alimony/create", middleware.AuthMiddleware(handlers.SalaryAlimonyHandler))
+	mux.HandleFunc("POST /api/agreements/{id}/alimony/{alimonyId}/update", middleware.AuthMiddleware(handlers.SalaryAlimonyHandler))
+	mux.HandleFunc("DELETE /api/agreements/{id}/alimony/{alimonyId}", middleware.AuthMiddleware(handlers.SalaryAlimonyHandler))
+	// --------- конец нового кода chat
 	mux.HandleFunc("POST /api/agreements/{id}/advances/create", middleware.AuthMiddleware(handlers.SalaryAdvanceHandler))
 	mux.HandleFunc("POST /api/agreements/{id}/advances/{advanceId}/update", middleware.AuthMiddleware(handlers.SalaryAdvanceHandler))
 	mux.HandleFunc("DELETE /api/agreements/{id}/advances/{advanceId}", middleware.AuthMiddleware(handlers.SalaryAdvanceHandler))
@@ -163,6 +170,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("PATCH /api/agreements/{id}/debts/{debtId}/status", middleware.AuthMiddleware(handlers.SalaryDebtHandler))
 	// --------- новый код chat: индивидуальные выплаты и согласования
 	mux.HandleFunc("POST /api/agreements/{id}/timesheetmonth/{monthId}/payment-draft", middleware.AuthMiddleware(handlers.SalaryPaymentDraftHandler))
+	mux.HandleFunc("GET /api/agreements/{id}/timesheetmonth/{monthId}/approval-history", middleware.AuthMiddleware(handlers.SalaryApprovalHistoryHandler)) // новый код chat: история согласований
 	mux.HandleFunc("POST /api/agreements/{id}/timesheetmonth/{monthId}/employee-approvals", middleware.AuthMiddleware(handlers.SalaryEmployeeApprovalHandler))
 	mux.HandleFunc("POST /api/agreements/{id}/timesheetmonth/{monthId}/approval", middleware.AuthMiddleware(handlers.SalaryApprovalHandler))
 	mux.HandleFunc("DELETE /api/agreements/{id}/timesheetmonth/{monthId}/approval", middleware.AuthMiddleware(handlers.SalaryApprovalHandler))

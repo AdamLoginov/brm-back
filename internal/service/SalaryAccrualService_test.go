@@ -53,7 +53,8 @@ func salaryTestDB(t *testing.T) *gorm.DB {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { sqlDB.Close() })
-	if err := db.AutoMigrate(&models.SalaryAlimony{}, &models.Agreement{}, &models.EmployeeCard{}, &models.TimeSheetMonth{}, &models.TimeSheet{}, &models.SalaryAccrual{}, &models.DailyAllowanceAccrual{}); err != nil {
+	// новый код chat: история видимости общих алиментов
+	if err := db.AutoMigrate(&models.SalaryAlimonyEmployeeHistory{}, &models.SalaryAlimony{}, &models.Agreement{}, &models.EmployeeCard{}, &models.TimeSheetMonth{}, &models.TimeSheet{}, &models.SalaryAccrual{}, &models.DailyAllowanceAccrual{}); err != nil {
 		t.Fatal(err)
 	}
 	return db

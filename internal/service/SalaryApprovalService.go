@@ -19,6 +19,8 @@ var ErrSalaryApprovalConflict = errors.New("Расчёт изменился ил
 var salaryApprovalMutex sync.Mutex
 
 type SalaryApprovalInput struct {
+	ActorID    uint   `json:"-"` // новый код chat: только из авторизованного запроса
+	GroupKey   string `json:"-"` // новый код chat: группа массового согласования
 	Date       string `json:"date"`
 	RequestKey string `json:"request_key"`
 	Revision   string `json:"revision"`
@@ -168,6 +170,10 @@ func fillSalaryDetails(db *gorm.DB, agreementID, monthID uint, result *SalaryDeb
 		return db.Where("agreement_id = ? AND employee_card_id IN ?", agreementID, ids).Order("id")
 	}
 	var detail SalaryApprovalDetail
+	// новый код chat: незакрытые алименты сотрудника независимо от договора
+	if err := db.Where("employee_card_id IN ? AND is_settled = ?", ids, false).Order("id").Find(&detail.Alimonies).Error; err != nil {
+		return err
+	}
 	if err := db.Where("time_sheet_month_id = ? AND employee_card_id IN ?", monthID, ids).Order("id").Find(&detail.TimeSheets).Error; err != nil { // новый код chat: месяц уже проверен на принадлежность договору
 		return err
 	}
@@ -193,6 +199,10 @@ func fillSalaryDetails(db *gorm.DB, agreementID, monthID uint, result *SalaryDeb
 	for _, v := range detail.Advances {
 		i := index[v.EmployeeCardID]
 		result.Accruals[i].Detail.Advances = append(result.Accruals[i].Detail.Advances, v)
+	}
+	for _, v := range detail.Alimonies { // новый код chat: состав удержания включён в версию и снимок
+		i := index[v.EmployeeCardID]
+		result.Accruals[i].Detail.Alimonies = append(result.Accruals[i].Detail.Alimonies, v)
 	}
 	for _, v := range detail.Penalties {
 		i := index[v.EmployeeCardID]
@@ -234,7 +244,7 @@ func approveSalaryEmployee(db *gorm.DB, agreementID, monthID uint, input SalaryA
 		var previous models.SalaryApproval
 		lookup := tx.Where("request_key = ?", input.RequestKey).First(&previous).Error
 		if lookup == nil {
-			if previous.RequestHash != hash || (previous.ActiveMonthID == nil && previous.ActiveEmployeeKey == nil) {
+			if previous.RequestHash != hash || previous.AuthorUserID != input.ActorID || (previous.ActiveMonthID == nil && previous.ActiveEmployeeKey == nil) { // новый код chat: проверяем автора повторного запроса
 				return ErrSalaryApprovalConflict
 			}
 			return json.Unmarshal([]byte(previous.Snapshot), &result)
@@ -302,6 +312,18 @@ func approveSalaryEmployee(db *gorm.DB, agreementID, monthID uint, input SalaryA
 			payments[v.EmployeeCardID] = amount
 		}
 		approval := models.SalaryApproval{AgreementID: agreementID, TimeSheetMonthID: monthID, ActiveMonthID: &monthID, Date: input.Date, RequestKey: input.RequestKey, RequestHash: hash}
+		// новый код chat: фиксируем автора и исходную группу, а не читаем их из JSON клиента
+		approval.AuthorUserID, approval.GroupKey = input.ActorID, input.GroupKey
+		if approval.GroupKey == "" {
+			approval.GroupKey = input.RequestKey
+		}
+		if input.ActorID != 0 {
+			var author models.User
+			if err := tx.Select("id", "login").First(&author, input.ActorID).Error; err != nil {
+				return err
+			}
+			approval.AuthorName = author.Login
+		}
 		// --------- новый код chat: индивидуальные выплаты и согласования
 		if employeeID != 0 {
 			key := fmt.Sprintf("%d/%d/%d", agreementID, monthID, employeeID)
@@ -344,6 +366,19 @@ func approveSalaryEmployee(db *gorm.DB, agreementID, monthID uint, input SalaryA
 			// --------- новый код chat: индивидуальные выплаты и согласования
 			row.Approved, row.ApprovalID, row.ApprovalDate = true, approval.ID, input.Date
 			row.Revision = salaryRowRevision(*row) // новый код chat: стабильная версия снимка
+			// --------- новый код chat: одно удержание может закрыть только одно согласование
+			for _, v := range row.Detail.Alimonies {
+				update := tx.Model(&models.SalaryAlimony{}).Where("id = ? AND employee_card_id = ? AND is_settled = ?", v.ID, row.EmployeeCardID, false).
+					Updates(map[string]any{"is_settled": true, "closed_at": date, "settlement_approval_id": approval.ID})
+				if update.Error != nil {
+					return update.Error
+				}
+				if update.RowsAffected != 1 {
+					return ErrSalaryApprovalConflict
+				}
+				changes = append(changes, salaryApprovalChange{Table: "salary_alimonies", ID: v.ID, Column: "is_settled", Before: false, After: true})
+			}
+			// --------- конец нового кода chat
 			for _, v := range row.Detail.Advances {
 				if err := change("salary_advances", v.ID, "is_settled", false, true, nil); err != nil {
 					return err
@@ -437,6 +472,17 @@ func cancelSalaryEmployee(db *gorm.DB, agreementID, monthID, approvalID uint) er
 			return err
 		}
 		for _, v := range changes {
+			// новый код chat: алименты не имеют agreement_id; отменяем только своё закрытие
+			if v.Table == "salary_alimonies" {
+				if v.Created || v.Column != "is_settled" {
+					return ErrSalaryApprovalInput
+				}
+				if err := tx.Model(&models.SalaryAlimony{}).Where("id = ? AND settlement_approval_id = ? AND is_settled = ?", v.ID, approval.ID, true).
+					Updates(map[string]any{"is_settled": false, "closed_at": nil, "settlement_approval_id": nil}).Error; err != nil {
+					return err
+				}
+				continue
+			}
 			allowed := map[string]string{"salary_advances": "is_settled", "salary_penalties": "status", "expenses": "is_reimbursed", "salary_bonus": "is_paid", "salary_debts": "is_closed"}
 			column, ok := allowed[v.Table]
 			if !ok {
@@ -463,6 +509,10 @@ func cancelSalaryEmployee(db *gorm.DB, agreementID, monthID, approvalID uint) er
 					return err
 				}
 			}
+		}
+		// новый код chat: сохраняем ручную выплату, если исходные данные не изменились.
+		if err := restoreSalaryDraftRevision(tx, approval); err != nil {
+			return err
 		}
 		return tx.Model(&approval).Updates(map[string]any{"active_month_id": nil, "active_employee_key": nil}).Error // --------- новый код chat: индивидуальные выплаты и согласования
 	})

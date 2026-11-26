@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"project/internal/database"
+	"project/internal/middleware" // новый код chat: автор согласования
 	"project/internal/service"
 	"strconv"
 )
@@ -46,6 +47,7 @@ func SalaryApprovalHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "Некорректные данные согласования", 400)
 			return
 		}
+		input.ActorID = middleware.CurrentUserID(r) // новый код chat: доверяем только контексту авторизации
 		result, err := service.ApproveSalary(database.DB, uint(agreementID), uint(monthID), input)
 		salaryApprovalResponse(w, result, err)
 	} else if r.Method == http.MethodDelete {

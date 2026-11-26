@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"project/internal/database"
+	"project/internal/middleware" // новый код chat: автор массового согласования
 	"project/internal/service"
 	"strconv"
 )
@@ -44,6 +45,7 @@ func SalaryEmployeeApprovalHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Некорректные данные запроса", 400)
 		return
 	}
+	input.ActorID = middleware.CurrentUserID(r) // новый код chat
 	result, err := service.ApplySalaryEmployeeApprovals(database.DB, a, m, input)
 	salaryApprovalResponse(w, result, err)
 }

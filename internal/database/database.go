@@ -21,6 +21,10 @@ func InitDB() {
 		panic("не удалось подключиться к базе данных")
 	}
 
+	// новый код chat: удаляем только устаревшие суммы алиментов за табель
+	if err := migrateEmployeeAlimony(DB); err != nil {
+		panic(err)
+	}
 	DB.AutoMigrate(
 		&models.MeasurementUnit{}, &models.AgreementWorkshop{}, &models.AgreementWorkBlock{}, &models.AgreementWorkPosition{}, // новый код chat
 		&models.WorkOrderBook{}, &models.WorkOrderDay{}, &models.WorkOrderShift{}, &models.WorkOrderEmployee{}, &models.WorkOrderTask{}, // новый код chat

@@ -117,6 +117,7 @@ type SalaryAccrualWithDebts struct {
 	Detail                 SalaryApprovalDetail `json:"detail"`
 }
 type SalaryApprovalDetail struct {
+	Alimonies  []models.SalaryAlimony `json:"alimonies"` // новый код chat: удержания сотрудника всех договоров
 	TimeSheets []models.TimeSheet     `json:"time_sheets"`
 	Advances   []models.SalaryAdvance `json:"advances"`
 	Penalties  []models.SalaryPenalty `json:"penalties"`

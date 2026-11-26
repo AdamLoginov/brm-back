@@ -455,13 +455,23 @@ type SalaryPaymentDraft struct {
 	Revision         string
 }
 
-// --------- новый код chat: алименты сотрудника за конкретный табель
+// --------- новый код chat: алименты принадлежат сотруднику, независимо от договора
 type SalaryAlimony struct {
 	gorm.Model
-	AgreementID      uint  `gorm:"uniqueIndex:idx_salary_alimony;not null"`
-	TimeSheetMonthID uint  `gorm:"uniqueIndex:idx_salary_alimony;not null"`
-	EmployeeCardID   uint  `gorm:"uniqueIndex:idx_salary_alimony;not null"`
-	AmountKopecks    int64 `gorm:"not null;default:0"`
+	EmployeeCardID       uint       `gorm:"index;not null" json:"employee_card_id"`
+	EmployeeName         string     `json:"employee_name"`
+	Date                 string     `json:"date"`
+	AmountKopecks        int64      `gorm:"not null" json:"amount_kopecks"`
+	Comment              string     `json:"comment"`
+	IsSettled            bool       `gorm:"not null;default:false" json:"is_settled"`
+	ClosedAt             *time.Time `json:"closed_at"`
+	SettlementApprovalID *uint      `gorm:"index" json:"settlement_approval_id"`
+}
+
+// новый код chat: история видимости сотрудника во вкладке; не владелец и не область удержания
+type SalaryAlimonyEmployeeHistory struct {
+	EmployeeCardID uint `gorm:"primaryKey"`
+	AgreementID    uint `gorm:"primaryKey"`
 }
 
 // --------- конец нового кода chat
@@ -469,15 +479,20 @@ type SalaryAlimony struct {
 // --------- новый код chat: повтор массового запроса не повторяет финансовые операции
 type SalaryApprovalBatch struct {
 	gorm.Model
-	RequestKey  string `gorm:"uniqueIndex;not null"`
-	RequestHash string
-	Snapshot    string `gorm:"type:text"`
+	AuthorUserID uint   `gorm:"index"` // новый код chat: повтор запроса только тем же пользователем
+	RequestKey   string `gorm:"uniqueIndex;not null"`
+	RequestHash  string
+	Snapshot     string `gorm:"type:text"`
 }
 
 // --------- конец нового кода chat
 
 // --------- новый код chat: индивидуальные выплаты и согласования
 type SalaryApproval struct {
+	// новый код chat: автор и группа сохраняются вместе со снимком согласования
+	AuthorUserID uint   `gorm:"index" json:"author_user_id"`
+	AuthorName   string `json:"author_name"`
+	GroupKey     string `gorm:"index" json:"-"`
 	// --------- новый код chat: индивидуальные выплаты и согласования
 	EmployeeCardID    uint    `gorm:"index"`
 	ActiveEmployeeKey *string `gorm:"uniqueIndex"`

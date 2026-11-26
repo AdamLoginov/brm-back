@@ -157,11 +157,11 @@ func recountEmployeeSalary(s *SalaryDebtSummary) error {
 }
 
 type SalaryPaymentDraftInput struct {
-	EmployeeCardID uint    `json:"employee_card_id"`
-	Revision       string  `json:"revision"`
-	Amount         string  `json:"amount"`
-	Reset          bool    `json:"reset"`
-	AlimonyAmount  *string `json:"alimony_amount"` // новый код chat: отсутствие поля сохраняет прежнее значение
+	EmployeeCardID uint   `json:"employee_card_id"`
+	Revision       string `json:"revision"`
+	Amount         string `json:"amount"`
+	Reset          bool   `json:"reset"`
+	ResetAll       bool   `json:"reset_all"` // новый код chat: сброс черновиков несогласованных сотрудников
 }
 
 func SaveSalaryPaymentDraft(db *gorm.DB, agreementID, monthID uint, input SalaryPaymentDraftInput) (SalaryDebtSummary, error) {
@@ -173,6 +173,26 @@ func SaveSalaryPaymentDraft(db *gorm.DB, agreementID, monthID uint, input Salary
 		if err != nil {
 			return err
 		}
+		// --------- новый код chat: общий сброс в одной транзакции, только в выбранном табеле
+		if input.ResetAll {
+			if input.EmployeeCardID != 0 || input.Amount != "" || input.Revision != "" || input.Reset {
+				return ErrSalaryApprovalInput
+			}
+			ids := []uint{}
+			for _, row := range current.Accruals {
+				if !row.Approved {
+					ids = append(ids, row.EmployeeCardID)
+				}
+			}
+			if len(ids) > 0 {
+				if err = tx.Unscoped().Where("agreement_id = ? AND time_sheet_month_id = ? AND employee_card_id IN ?", agreementID, monthID, ids).Delete(&models.SalaryPaymentDraft{}).Error; err != nil {
+					return err
+				}
+			}
+			result, err = employeeSalaryCalculation(tx, agreementID, monthID, false)
+			return err
+		}
+		// --------- конец нового кода chat
 		for _, r := range current.Accruals {
 			if r.EmployeeCardID != input.EmployeeCardID {
 				continue
@@ -181,23 +201,6 @@ func SaveSalaryPaymentDraft(db *gorm.DB, agreementID, monthID uint, input Salary
 				return ErrSalaryApprovalConflict
 			}
 			query := tx.Unscoped().Where("agreement_id = ? AND time_sheet_month_id = ? AND employee_card_id = ?", agreementID, monthID, input.EmployeeCardID)
-			// --------- новый код chat: обе суммы сохраняются в одной транзакции
-			if !input.Reset && input.AlimonyAmount != nil {
-				if err = saveSalaryAlimony(tx, r, *input.AlimonyAmount); err != nil {
-					return err
-				}
-				updated, e := employeeSalaryCalculation(tx, agreementID, monthID, false)
-				if e != nil {
-					return e
-				}
-				for _, item := range updated.Accruals {
-					if item.EmployeeCardID == r.EmployeeCardID {
-						r = item
-						break
-					}
-				}
-			}
-			// --------- конец нового кода chat
 			if input.Reset {
 				err = query.Delete(&models.SalaryPaymentDraft{}).Error
 			} else {
@@ -239,12 +242,17 @@ func splitLegacySalaryApproval(tx *gorm.DB, agreementID, monthID uint) error {
 	}
 	journals := map[uint][]salaryApprovalChange{}
 	for _, c := range changes {
-		allowed := map[string]bool{"salary_advances": true, "salary_penalties": true, "expenses": true, "salary_bonus": true, "salary_debts": true}
+		allowed := map[string]bool{"salary_advances": true, "salary_penalties": true, "expenses": true, "salary_bonus": true, "salary_debts": true, "salary_alimonies": true}
 		if !allowed[c.Table] {
 			return ErrSalaryApprovalInput
 		}
 		var owner struct{ EmployeeCardID uint }
-		if err = tx.Table(c.Table).Where("id = ? AND agreement_id = ?", c.ID, agreementID).Select("employee_card_id").Take(&owner).Error; err != nil {
+		// новый код chat: общий список алиментов не имеет договора
+		ownerQuery := tx.Table(c.Table).Where("id = ?", c.ID)
+		if c.Table != "salary_alimonies" {
+			ownerQuery = ownerQuery.Where("agreement_id = ?", agreementID)
+		}
+		if err = ownerQuery.Select("employee_card_id").Take(&owner).Error; err != nil {
 			return err
 		}
 		journals[owner.EmployeeCardID] = append(journals[owner.EmployeeCardID], c)
@@ -252,8 +260,21 @@ func splitLegacySalaryApproval(tx *gorm.DB, agreementID, monthID uint) error {
 	for _, row := range snapshot.Accruals {
 		key := fmt.Sprintf("%d/%d/%d", agreementID, monthID, row.EmployeeCardID)
 		a := models.SalaryApproval{AgreementID: agreementID, TimeSheetMonthID: monthID, EmployeeCardID: row.EmployeeCardID, ActiveEmployeeKey: &key, Date: old.Date, RequestKey: fmt.Sprintf("legacy-%d-%d", old.ID, row.EmployeeCardID)}
+		// новый код chat: частичная отмена старого общего согласования сохраняет автора, время и группу
+		a.AuthorUserID, a.AuthorName, a.GroupKey, a.CreatedAt = old.AuthorUserID, old.AuthorName, old.GroupKey, old.CreatedAt
+		if a.GroupKey == "" {
+			a.GroupKey = fmt.Sprintf("legacy-%d", old.ID)
+		}
 		if err = tx.Create(&a).Error; err != nil {
 			return err
+		}
+		// новый код chat: при разделении общего согласования переносим владельца закрытия
+		for _, change := range journals[row.EmployeeCardID] {
+			if change.Table == "salary_alimonies" {
+				if err = tx.Model(&models.SalaryAlimony{}).Where("id = ? AND settlement_approval_id = ?", change.ID, old.ID).Update("settlement_approval_id", a.ID).Error; err != nil {
+					return err
+				}
+			}
 		}
 		row.Approved = true
 		row.ApprovalID = a.ID
@@ -286,6 +307,7 @@ type SalaryEmployeeSelection struct {
 	Amount         string `json:"amount"`
 }
 type SalaryEmployeeApprovalInput struct {
+	ActorID    uint                      `json:"-"` // новый код chat: пользователь из контекста авторизации
 	Date       string                    `json:"date"`
 	RequestKey string                    `json:"request_key"`
 	Employees  []SalaryEmployeeSelection `json:"employees"`
@@ -307,7 +329,7 @@ func ApplySalaryEmployeeApprovals(db *gorm.DB, agreementID, monthID uint, input 
 		var receipt models.SalaryApprovalBatch
 		lookup := tx.Where("request_key = ?", input.RequestKey).First(&receipt).Error
 		if lookup == nil {
-			if receipt.RequestHash != requestHash {
+			if receipt.RequestHash != requestHash || receipt.AuthorUserID != input.ActorID { // новый код chat: повтор принадлежит тому же пользователю
 				return ErrSalaryApprovalConflict
 			}
 			return json.Unmarshal([]byte(receipt.Snapshot), &result)
@@ -367,6 +389,7 @@ func ApplySalaryEmployeeApprovals(db *gorm.DB, agreementID, monthID uint, input 
 				err = cancelSalaryEmployee(tx, agreementID, monthID, r.ApprovalID)
 			} else {
 				var approval SalaryApprovalInput
+				approval.ActorID, approval.GroupKey = input.ActorID, input.RequestKey // новый код chat: общий автор и группа операции
 				approval.Date = input.Date
 				approval.RequestKey = fmt.Sprintf("%s-%d", input.RequestKey, v.EmployeeCardID)
 				approval.Revision = r.Revision
@@ -379,9 +402,8 @@ func ApplySalaryEmployeeApprovals(db *gorm.DB, agreementID, monthID uint, input 
 			if err != nil {
 				return err
 			}
-			if err = tx.Unscoped().Where("agreement_id = ? AND time_sheet_month_id = ? AND employee_card_id = ?", agreementID, monthID, v.EmployeeCardID).Delete(&models.SalaryPaymentDraft{}).Error; err != nil {
-				return err
-			}
+			// новый код chat: сохраняем черновик при согласовании и отмене;
+			// обычная проверка ревизии сбросит его только при изменении исходных данных.
 		}
 		result, err = employeeSalaryCalculation(tx, agreementID, monthID, true)
 		if err != nil {
@@ -391,7 +413,7 @@ func ApplySalaryEmployeeApprovals(db *gorm.DB, agreementID, monthID uint, input 
 		if err != nil {
 			return err
 		}
-		return tx.Create(&models.SalaryApprovalBatch{RequestKey: input.RequestKey, RequestHash: requestHash, Snapshot: string(snapshot)}).Error
+		return tx.Create(&models.SalaryApprovalBatch{RequestKey: input.RequestKey, RequestHash: requestHash, Snapshot: string(snapshot), AuthorUserID: input.ActorID}).Error // новый код chat: автор массового запроса
 	})
 	return result, err
 }
