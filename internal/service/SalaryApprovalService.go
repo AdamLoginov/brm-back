@@ -114,6 +114,25 @@ func calculateSalaryApproval(db *gorm.DB, agreementID, monthID uint, calculate b
 	if err != nil {
 		return result, err
 	}
+	result, err = salaryWithAdjustments(db, agreementID, monthID, rows)
+	if err != nil {
+		return result, err
+	}
+	if err = fillSalaryDetails(db, agreementID, monthID, &result); err != nil {
+		return result, err
+	}
+	canonical := result
+	canonical.Accruals = append([]SalaryAccrualWithDebts{}, result.Accruals...)
+	for i := range canonical.Accruals {
+		canonical.Accruals[i].Model = gorm.Model{}
+	}
+	result.Revision = salaryHash(canonical)
+	return result, nil
+}
+
+// новый код chat: общие правила расчёта для ведомости и главной страницы
+func salaryWithAdjustments(db *gorm.DB, agreementID, monthID uint, rows []models.SalaryAccrual) (SalaryDebtSummary, error) {
+	var result SalaryDebtSummary
 	a, err := AddSalaryAdvances(db, agreementID, rows)
 	if err != nil {
 		return result, err
@@ -134,21 +153,7 @@ func calculateSalaryApproval(db *gorm.DB, agreementID, monthID uint, calculate b
 	if err != nil {
 		return result, err
 	}
-	result, err = AddSalaryDebts(db, agreementID, b)
-	if err != nil {
-		return result, err
-	}
-	if err = fillSalaryDetails(db, agreementID, monthID, &result); err != nil {
-		return result, err
-	}
-	// UpdatedAt начисления меняется при пересчёте, поэтому не включается в отпечаток.
-	canonical := result
-	canonical.Accruals = append([]SalaryAccrualWithDebts{}, result.Accruals...)
-	for i := range canonical.Accruals {
-		canonical.Accruals[i].Model = gorm.Model{}
-	}
-	result.Revision = salaryHash(canonical)
-	return result, nil
+	return AddSalaryDebts(db, agreementID, b)
 }
 
 func fillSalaryDetails(db *gorm.DB, agreementID, monthID uint, result *SalaryDebtSummary) error {

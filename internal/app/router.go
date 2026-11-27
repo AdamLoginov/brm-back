@@ -8,6 +8,7 @@ import (
 
 func NewRouter() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/dashboard", middleware.AuthMiddleware(handlers.DashboardHandler)) // новый код chat
 	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/blocks/{blockId}/statement", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler))       // новый код chat
 	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/statements/{statementMode}", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler))       // новый код chat: все ведомости одной книгой
 	mux.HandleFunc("GET /api/agreements/{id}/work-orders/books/{bookId}/positions/{positionId}/statement", middleware.AuthMiddleware(handlers.WorkOrderPositionExcelHandler)) // новый код chat: ведомость по шаблону

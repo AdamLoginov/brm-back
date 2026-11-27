@@ -90,54 +90,19 @@ func CalculateSalaryAccruals(db *gorm.DB, agreementID, monthID uint) ([]models.S
 		if err := tx.Preload("Employees").Preload("TimeSheets").First(&month, month.ID).Error; err != nil {
 			return err
 		}
-		hoursByEmployee := make(map[uint]*big.Rat)
-		for _, entry := range month.TimeSheets {
-			hours := parseSalaryDecimal(entry.Status)
-			if hours.Cmp(big.NewRat(24, 1)) > 0 {
-				continue // некорректное количество часов в одной дневной записи
-			}
-			if hoursByEmployee[entry.EmployeeCardID] == nil {
-				hoursByEmployee[entry.EmployeeCardID] = new(big.Rat)
-			}
-			hoursByEmployee[entry.EmployeeCardID].Add(hoursByEmployee[entry.EmployeeCardID], hours)
+		calculated, err := salaryRowsForMonth(month) // новый код chat: тот же расчёт для сводки
+		if err != nil {
+			return err
 		}
-		employeeIDs := make([]uint, 0, len(month.Employees))
-		var total int64
-		for _, employee := range month.Employees {
-			employeeIDs = append(employeeIDs, employee.ID)
-			hours := hoursByEmployee[employee.ID]
-			if hours == nil {
-				hours = new(big.Rat)
-			}
-			rate := salaryRateKopecks(employee.SalaryRate)
-			amount, err := salaryAmountKopecks(hours, rate, month.ShiftHours)
-			if err != nil {
-				return err
-			} // новый код chat: ошибка нормы смены
-			if total > maxSalaryKopecks-amount {
-				return ErrSalaryAmountOverflow
-			}
-			total += amount
-			nameParts := []string{}
-			if employee.Surname != nil {
-				nameParts = append(nameParts, *employee.Surname)
-			}
-			nameParts = append(nameParts, employee.Name)
-			if employee.MiddleName != nil {
-				nameParts = append(nameParts, *employee.MiddleName)
-			}
-			row := models.SalaryAccrual{
-				TimeSheetMonthID: month.ID, EmployeeCardID: employee.ID, AgreementID: agreementID,
-				EmployeeName: strings.TrimSpace(strings.Join(nameParts, " ")),
-				TotalHours:   hours.FloatString(2), ShiftHours: month.ShiftHours,
-				SalaryRateKopecks: rate, AmountKopecks: amount,
-			}
+		employeeIDs := make([]uint, 0, len(calculated))
+		for _, row := range calculated {
+			employeeIDs = append(employeeIDs, row.EmployeeCardID)
 			// Уникальная пара табель + сотрудник сохраняет ID при повторном расчёте.
 			if err := tx.Clauses(clause.OnConflict{
 				Columns: []clause.Column{{Name: "time_sheet_month_id"}, {Name: "employee_card_id"}},
 				DoUpdates: clause.Assignments(map[string]interface{}{
 					"employee_name": row.EmployeeName, "total_hours": row.TotalHours,
-					"shift_hours": row.ShiftHours, "salary_rate_kopecks": rate, "amount_kopecks": amount,
+					"shift_hours": row.ShiftHours, "salary_rate_kopecks": row.SalaryRateKopecks, "amount_kopecks": row.AmountKopecks,
 					"agreement_id": agreementID, "updated_at": time.Now(), "deleted_at": nil,
 				}),
 			}).Create(&row).Error; err != nil {
@@ -156,4 +121,50 @@ func CalculateSalaryAccruals(db *gorm.DB, agreementID, monthID uint) ([]models.S
 	return rows, err
 }
 
-// --------- конец нового кода chat
+// новый код chat: расчёт в памяти без изменения ведомости
+func salaryRowsForMonth(month models.TimeSheetMonth) ([]models.SalaryAccrual, error) {
+	hoursByEmployee := make(map[uint]*big.Rat)
+	for _, entry := range month.TimeSheets {
+		hours := parseSalaryDecimal(entry.Status)
+		if hours.Cmp(big.NewRat(24, 1)) > 0 {
+			continue // некорректное количество часов в одной дневной записи
+		}
+		if hoursByEmployee[entry.EmployeeCardID] == nil {
+			hoursByEmployee[entry.EmployeeCardID] = new(big.Rat)
+		}
+		hoursByEmployee[entry.EmployeeCardID].Add(hoursByEmployee[entry.EmployeeCardID], hours)
+	}
+	rows := make([]models.SalaryAccrual, 0, len(month.Employees))
+	var total int64
+	for _, employee := range month.Employees {
+		hours := hoursByEmployee[employee.ID]
+		if hours == nil {
+			hours = new(big.Rat)
+		}
+		rate := salaryRateKopecks(employee.SalaryRate)
+		amount, err := salaryAmountKopecks(hours, rate, month.ShiftHours)
+		if err != nil {
+			return nil, err
+		} // новый код chat: ошибка нормы смены
+		if total > maxSalaryKopecks-amount {
+			return nil, ErrSalaryAmountOverflow
+		}
+		total += amount
+		nameParts := []string{}
+		if employee.Surname != nil {
+			nameParts = append(nameParts, *employee.Surname)
+		}
+		nameParts = append(nameParts, employee.Name)
+		if employee.MiddleName != nil {
+			nameParts = append(nameParts, *employee.MiddleName)
+		}
+		row := models.SalaryAccrual{
+			TimeSheetMonthID: month.ID, EmployeeCardID: employee.ID, AgreementID: month.AgreementID,
+			EmployeeName: strings.TrimSpace(strings.Join(nameParts, " ")),
+			TotalHours:   hours.FloatString(2), ShiftHours: month.ShiftHours,
+			SalaryRateKopecks: rate, AmountKopecks: amount,
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
+}
