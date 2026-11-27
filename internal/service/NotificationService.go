@@ -107,7 +107,7 @@ func validateTaskDueDate(value string) error {
 }
 
 // --------- конец нового кода chat
-func CreateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task) (models.Task, error) {
+func CreateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task, files ...func(*gorm.DB, uint) error) (models.Task, error) {
 	taskNotificationMutex.Lock()
 	defer taskNotificationMutex.Unlock()
 	if err := validateTaskDueDate(input.DueDate); err != nil {
@@ -129,6 +129,11 @@ func CreateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task) (
 		if err = saveTaskUsers(tx, &task, users); err != nil {
 			return err
 		}
+		for _, save := range files { // новый код chat
+			if err := save(tx, task.ID); err != nil {
+				return err
+			}
+		}
 		for _, user := range users {
 			if err = notifyTask(tx, task, actor, user.ID, "assigned"); err != nil {
 				return err
@@ -138,7 +143,7 @@ func CreateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task) (
 	})
 	return task, err
 }
-func UpdateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task, completeOnly bool) (models.Task, error) {
+func UpdateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task, completeOnly bool, files ...func(*gorm.DB, uint) error) (models.Task, error) {
 	taskNotificationMutex.Lock()
 	defer taskNotificationMutex.Unlock()
 	var task models.Task
@@ -198,7 +203,12 @@ func UpdateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task, c
 		// --------- новый код chat: одно событие каждому участнику, кроме редактора
 		recipients := taskUsers(task)
 		changed := previousMessage != task.Message || previousPriority != task.Priority || previousDueDate != task.DueDate
-		if len(previousUsers) != len(recipients) {
+		for _, save := range files { // новый код chat
+			if err := save(tx, task.ID); err != nil {
+				return err
+			}
+		}
+		if len(files) > 0 || len(previousUsers) != len(recipients) {
 			changed = true
 		}
 		for _, id := range recipients {

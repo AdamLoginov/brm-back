@@ -67,7 +67,7 @@ func InitDB() {
 		&models.DailyAllowanceAccrual{}, // новый код chat: начисления суточных
 		&models.DailyAllowancePayment{}, // новый код chat: история выдач суточных
 		&models.Payment{},
-		&models.Task{},
+		&models.Task{}, &models.TaskAttachment{}, // новый код chat
 	)
 	// --------- новый код chat: перенос назначений после обновления схемы
 	// новый код chat: старый отпуск заменён отсутствием на объекте; суммы не меняются

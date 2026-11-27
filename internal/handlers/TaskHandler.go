@@ -13,7 +13,7 @@ import (
 func GetAllTaskHandler(w http.ResponseWriter, r *http.Request) {
 	var tasks []models.Task
 
-	if err := database.DB.Preload("Assignees.EmployeeCard").Preload("CompletedBy.EmployeeCard").Preload("ToUser.EmployeeCard").Preload("FromUser.EmployeeCard").Find(&tasks).Error; err != nil {
+	if err := database.DB.Preload("Attachments").Preload("Assignees.EmployeeCard").Preload("CompletedBy.EmployeeCard").Preload("ToUser.EmployeeCard").Preload("FromUser.EmployeeCard").Find(&tasks).Error; err != nil {
 		msg := "[Error] Ошибка получения данных задач"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)
@@ -30,26 +30,14 @@ func CreateTaskHandler(w http.ResponseWriter, r *http.Request) {
 	if actor == 0 {
 		return
 	}
-	var input models.Task
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024*1024)).Decode(&input); err != nil {
-		http.Error(w, "Некорректная задача", 400)
-		return
-	}
-	result, err := service.CreateTaskWithNotifications(database.DB, actor, input)
-	notificationResponse(w, result, err)
+	saveTaskRequest(w, r, actor, false) // новый код chat
 }
 func UpdateTaskHandler(w http.ResponseWriter, r *http.Request) {
 	actor := notificationUser(w, r)
 	if actor == 0 {
 		return
 	}
-	var input models.Task
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1024*1024)).Decode(&input); err != nil {
-		http.Error(w, "Некорректная задача", 400)
-		return
-	}
-	result, err := service.UpdateTaskWithNotifications(database.DB, actor, input, false)
-	notificationResponse(w, result, err)
+	saveTaskRequest(w, r, actor, true) // новый код chat
 }
 func taskRequestID(w http.ResponseWriter, r *http.Request) uint {
 	id, err := strconv.ParseUint(r.PathValue("id"), 10, 32)

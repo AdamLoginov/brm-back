@@ -621,8 +621,18 @@ type Consumable struct {
 
 // --------- конец нового кода chat
 
+// --------- новый код chat: вложения задачи
+type TaskAttachment struct {
+	ID           uint   `gorm:"primaryKey" json:"id"`
+	TaskID       uint   `gorm:"index" json:"-"`
+	StoredFileID uint   `json:"-"`
+	Name         string `json:"name"`
+	MIME         string `json:"mime"` // новый код chat: тип миниатюры
+}
+
 type Task struct {
-	DueDate string `gorm:"default:''" json:"due_date"` // новый код chat: дата включительно, без времени; пусто — без срока
+	Attachments []TaskAttachment `json:"attachments"`                // новый код chat
+	DueDate     string           `gorm:"default:''" json:"due_date"` // новый код chat: дата включительно, без времени; пусто — без срока
 	gorm.Model
 	// --------- новый код chat: участники общей задачи и фактический исполнитель
 	Assignees     []User `gorm:"many2many:task_assignees;" json:"assignees"`

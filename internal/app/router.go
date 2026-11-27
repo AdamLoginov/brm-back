@@ -250,6 +250,7 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/attachment/{id}", middleware.AuthMiddleware(handlers.DownloadAttachmenthandler))
 
 	// --------- новый код chat: изолированные маршруты чтения файлов
+	mux.HandleFunc("GET /api/files/tasks/{id}", middleware.FileAuthMiddleware(handlers.TaskFileHandler)) // новый код chat
 	mux.HandleFunc("POST /api/files/session", handlers.FileSessionHandler)
 	mux.HandleFunc("POST /api/files/logout", handlers.FileLogoutHandler)
 	mux.HandleFunc("GET /api/files/documents/{id}", middleware.FileAuthMiddleware(handlers.GetEmployeeCardDocumentDetailHandler))
