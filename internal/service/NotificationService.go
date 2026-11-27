@@ -154,6 +154,7 @@ func UpdateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task, c
 			return err
 		}
 		previousStatus := task.Status
+		previousMessage, previousPriority, previousDueDate := task.Message, task.Priority, task.DueDate // новый код chat: снимок до редактирования
 		previousUsers := taskUsers(task)
 		nextStatus := input.Status
 		if completeOnly {
@@ -194,13 +195,34 @@ func UpdateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task, c
 		if err = tx.Model(&task).Select("Message", "Status", "Priority", "CompletedAt", "CompletedByID", "DueDate").Updates(&task).Error; err != nil {
 			return err
 		}
+		// --------- новый код chat: одно событие каждому участнику, кроме редактора
 		recipients := taskUsers(task)
+		changed := previousMessage != task.Message || previousPriority != task.Priority || previousDueDate != task.DueDate
+		if len(previousUsers) != len(recipients) {
+			changed = true
+		}
 		for _, id := range recipients {
+			if !containsTaskUser(previousUsers, id) {
+				changed = true
+			}
+		}
+		recipients = append(recipients, task.FromUserID)
+		seen := map[uint]bool{actorID: true}
+		for _, id := range recipients {
+			if seen[id] || id == 0 {
+				continue
+			}
+			seen[id] = true
 			kind := ""
-			if previousStatus && !task.Status {
+			switch {
+			case !previousStatus && task.Status:
+				kind = "completed"
+			case previousStatus && !task.Status:
 				kind = "reopened"
-			} else if !containsTaskUser(previousUsers, id) {
+			case containsTaskUser(taskUsers(task), id) && !containsTaskUser(previousUsers, id):
 				kind = "assigned"
+			case changed:
+				kind = "updated"
 			}
 			if kind != "" {
 				if err = notifyTask(tx, task, actor, id, kind); err != nil {
@@ -208,19 +230,7 @@ func UpdateTaskWithNotifications(db *gorm.DB, actorID uint, input models.Task, c
 				}
 			}
 		}
-		if !previousStatus && task.Status {
-			recipients = append(recipients, task.FromUserID)
-			seen := map[uint]bool{actorID: true}
-			for _, id := range recipients {
-				if seen[id] {
-					continue
-				}
-				seen[id] = true
-				if err = notifyTask(tx, task, actor, id, "completed"); err != nil {
-					return err
-				}
-			}
-		}
+		// --------- конец нового кода chat
 		return nil
 	})
 	return task, err

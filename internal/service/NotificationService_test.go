@@ -54,13 +54,13 @@ func TestTaskNotificationLifecycle(t *testing.T) {
 	}
 	assertKinds(u[1].ID, "assigned")
 	assertKinds(u[0].ID)
-	// Повторное сохранение текста не создаёт уведомления о назначении.
+	// новый код chat: правка текста создаёт уведомление об изменении, а не о назначении.
 	task.Message = "Проверить табель и часы"
 	task, err = UpdateTaskWithNotifications(db, u[0].ID, task, false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertKinds(u[1].ID, "assigned")
+	assertKinds(u[1].ID, "updated", "assigned")
 	task.ToUserID = u[2].ID
 	task, err = UpdateTaskWithNotifications(db, u[0].ID, task, false)
 	if err != nil {
@@ -131,6 +131,96 @@ func TestTaskNotificationLifecycle(t *testing.T) {
 		t.Fatal("deleted task notifications remain")
 	}
 }
+
+// --------- новый код chat: получатели правок, отсутствие дублей и пустых событий
+func TestTaskEditNotifications(t *testing.T) {
+	db, u := notificationFixture(t)
+	task, err := CreateTaskWithNotifications(db, u[0].ID, models.Task{Message: "Исходная", Priority: 1, AssigneeIDs: []uint{u[0].ID, u[1].ID, u[2].ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	clear := func() {
+		t.Helper()
+		if err := db.Where("1 = 1").Delete(&models.Notification{}).Error; err != nil {
+			t.Fatal(err)
+		}
+	}
+	check := func(expected map[uint]string) {
+		t.Helper()
+		var rows []models.Notification
+		if err := db.Find(&rows).Error; err != nil {
+			t.Fatal(err)
+		}
+		if len(rows) != len(expected) {
+			t.Fatalf("notifications: %+v, want %v", rows, expected)
+		}
+		seen := map[uint]bool{}
+		for _, row := range rows {
+			if seen[row.RecipientID] || expected[row.RecipientID] != row.Kind || row.TaskMessage != task.Message {
+				t.Fatal("unexpected notification", row)
+			}
+			seen[row.RecipientID] = true
+		}
+	}
+	clear()
+	task.Message = "Изменённая"
+	task, err = UpdateTaskWithNotifications(db, u[1].ID, task, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(map[uint]string{u[0].ID: "updated", u[2].ID: "updated"})
+	clear()
+	task, err = UpdateTaskWithNotifications(db, u[1].ID, task, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(map[uint]string{})
+	task.AssigneeIDs = []uint{u[2].ID, u[1].ID, u[0].ID}
+	task, err = UpdateTaskWithNotifications(db, u[0].ID, task, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(map[uint]string{})
+	task.Priority = 3
+	task.DueDate = "2026-12-01"
+	task, err = UpdateTaskWithNotifications(db, u[0].ID, task, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(map[uint]string{u[1].ID: "updated", u[2].ID: "updated"})
+	clear()
+	task.Status = true
+	task.Message = "Правка с завершением"
+	task, err = UpdateTaskWithNotifications(db, u[1].ID, task, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(map[uint]string{u[0].ID: "completed", u[2].ID: "completed"})
+	clear()
+	task.Status = false
+	task, err = UpdateTaskWithNotifications(db, u[1].ID, task, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(map[uint]string{u[0].ID: "reopened", u[2].ID: "reopened"})
+	clear()
+	task.AssigneeIDs = []uint{u[1].ID}
+	task, err = UpdateTaskWithNotifications(db, u[1].ID, task, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(map[uint]string{u[0].ID: "updated"})
+	clear()
+	task.AssigneeIDs = []uint{u[1].ID, u[2].ID}
+	task, err = UpdateTaskWithNotifications(db, u[1].ID, task, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	check(map[uint]string{u[0].ID: "updated", u[2].ID: "assigned"})
+}
+
+// --------- конец нового кода chat
+
 func TestTaskSelfNotificationAndConcurrentCompletion(t *testing.T) {
 	db, u := notificationFixture(t)
 	task, err := CreateTaskWithNotifications(db, u[0].ID, models.Task{Message: "Самому себе", ToUserID: u[0].ID})
@@ -311,6 +401,12 @@ func TestSharedTaskParticipantsAndCompletion(t *testing.T) {
 	}
 	for _, user := range u {
 		list, _ := ListNotifications(db, user.ID, 1)
+		if user.ID == u[0].ID { // новый код chat: редактор не получает уведомление о собственном действии
+			if list.Items[0].Kind == "reopened" {
+				t.Fatal("self reopen notification")
+			}
+			continue
+		}
 		if list.Items[0].Kind != "reopened" {
 			t.Fatal("reopen notification")
 		}
@@ -334,8 +430,13 @@ func TestSharedTaskChangesAndInvalidRecipient(t *testing.T) {
 	}
 	for _, id := range []uint{u[1].ID, u[2].ID} {
 		list, _ := ListNotifications(db, id, 1)
-		if list.Total != 1 {
-			t.Fatal("existing assignee notified twice")
+		// новый код chat: прежнему исполнителю — изменение, новому — назначение
+		expected, kind := int64(1), "assigned"
+		if id == u[1].ID {
+			expected, kind = 2, "updated"
+		}
+		if list.Total != expected || list.Items[0].Kind != kind {
+			t.Fatal("assignee notification", list)
 		}
 	}
 	task.AssigneeIDs = []uint{u[2].ID, 999999}
