@@ -151,9 +151,20 @@ type EmployeeCard struct {
 
 type CategoryEmployeeDocument struct {
 	gorm.Model
-	CategoryName      string              `json:"category_name"`
-	EmployeeDocuments []EmployeeDocuments `gorm:"foreignKey:CategoryEmployeeDocumentID" json:"employee_documents"`
+	GroupID           *uint                  `json:"group_id"`                        // новый код chat: необязательная надкатегория
+	Group             *EmployeeDocumentGroup `gorm:"foreignKey:GroupID" json:"group"` // новый код chat
+	CategoryName      string                 `json:"category_name"`
+	EmployeeDocuments []EmployeeDocuments    `gorm:"foreignKey:CategoryEmployeeDocumentID" json:"employee_documents"`
 }
+
+// --------- новый код chat: надкатегории; физическое удаление освобождает приоритет
+type EmployeeDocumentGroup struct {
+	ID       uint   `gorm:"primaryKey"`
+	Name     string `json:"name"`
+	Priority int    `gorm:"uniqueIndex;check:priority > 0" json:"priority"`
+}
+
+// --------- конец нового кода chat
 
 // --------- новый код chat: единый реестр физических файлов
 type StoredFile struct {

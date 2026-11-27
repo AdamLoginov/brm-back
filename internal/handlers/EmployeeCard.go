@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause" // новый код chat
 	"log"
 	"net/http"
 	"os"
@@ -12,13 +13,14 @@ import (
 	"project/internal/models"
 	"project/internal/service" // новый код chat
 	"strconv"
+	"strings" // новый код chat
 )
 
 func GetEmployeeCardDetailHandler(w http.ResponseWriter, r *http.Request) {
 	var employeeCardId = r.PathValue("id")
 	var employeeCard models.EmployeeCard
 
-	if err := database.DB.Preload("Specializations").Preload("EmployeeDocuments.CategoryEmployeeDocument").Preload("Agreement").First(&employeeCard, employeeCardId).Error; err != nil {
+	if err := database.DB.Preload("Specializations").Preload("EmployeeDocuments.CategoryEmployeeDocument.Group").Preload("Agreement").First(&employeeCard, employeeCardId).Error; err != nil { // новый код chat
 		msg := "[Error] Ошибка при получении данных"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)
@@ -281,7 +283,7 @@ func DeleteEmployeeCardHandler(w http.ResponseWriter, r *http.Request) {
 func GetAllCategoryEmployeeDocumentHandler(w http.ResponseWriter, r *http.Request) {
 	var categoryEmployeeDocument []models.CategoryEmployeeDocument
 
-	if err := database.DB.Find(&categoryEmployeeDocument).Error; err != nil {
+	if err := database.DB.Preload("Group").Find(&categoryEmployeeDocument).Error; err != nil { // новый код chat
 		msg := "[Error] Ошибка при поиске категорий"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)
@@ -301,7 +303,24 @@ func CreateCategoryEmployeeDocumentHandler(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if err := database.DB.Create(&categoryEmployeeDocument).Error; err != nil {
+	// новый код chat: проверяем группу, не сохраняем вложенные объекты клиента
+	categoryEmployeeDocument.CategoryName = strings.TrimSpace(categoryEmployeeDocument.CategoryName)
+	if categoryEmployeeDocument.CategoryName == "" {
+		http.Error(w, "Укажите название категории", 400)
+		return
+	}
+	if categoryEmployeeDocument.GroupID != nil {
+		var group models.EmployeeDocumentGroup
+		if err := database.DB.First(&group, *categoryEmployeeDocument.GroupID).Error; err != nil {
+			http.Error(w, "Надкатегория не найдена", 400)
+			return
+		}
+		categoryEmployeeDocument.Group = &group
+	} else {
+		categoryEmployeeDocument.Group = nil
+	}
+	categoryEmployeeDocument.ID = 0
+	if err := database.DB.Omit(clause.Associations).Create(&categoryEmployeeDocument).Error; err != nil {
 		msg := "[Error] Ошибка при создании категории"
 		log.Println(msg)
 		http.Error(w, msg, http.StatusBadRequest)

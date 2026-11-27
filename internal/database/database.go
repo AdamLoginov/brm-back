@@ -43,6 +43,7 @@ func InitDB() {
 		&models.EmployeeBalance{},
 		&models.EmployeeDocuments{},
 		&models.CategoryEmployeeDocument{},
+		&models.EmployeeDocumentGroup{}, // новый код chat
 		&models.User{},
 		&models.Materials{},
 		&models.Suplers{},

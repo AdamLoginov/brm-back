@@ -57,6 +57,12 @@ func NewRouter() http.Handler {
 	mux.HandleFunc("GET /api/employeescard/{id}/statistics", middleware.AuthMiddleware(handlers.EmployeeStatisticsHandler)) // новый код chat: статистика за год
 	mux.HandleFunc("GET /api/employeescard/document/{id}/detail", middleware.AuthMiddleware(handlers.GetEmployeeCardDocumentDetailHandler))
 	mux.HandleFunc("GET /api/employeescard/document/category", middleware.AuthMiddleware(handlers.GetAllCategoryEmployeeDocumentHandler))
+	// новый код chat: управление надкатегориями документов
+	mux.HandleFunc("GET /api/employeescard/document/groups", middleware.AuthMiddleware(handlers.EmployeeDocumentGroupsHandler))
+	mux.HandleFunc("POST /api/employeescard/document/groups", middleware.AuthMiddleware(handlers.EmployeeDocumentGroupsHandler))
+	mux.HandleFunc("PUT /api/employeescard/document/groups/{id}", middleware.AuthMiddleware(handlers.EmployeeDocumentGroupsHandler))
+	mux.HandleFunc("DELETE /api/employeescard/document/groups/{id}/delete", middleware.AuthMiddleware(handlers.EmployeeDocumentGroupsHandler))
+	mux.HandleFunc("PUT /api/employeescard/document/category/{id}/group", middleware.AuthMiddleware(handlers.UpdateEmployeeDocumentCategoryGroupHandler))
 	mux.HandleFunc("POST /api/employeescard/document/category/create", middleware.AuthMiddleware(handlers.CreateCategoryEmployeeDocumentHandler))
 	mux.HandleFunc("POST /api/employeescard/create", middleware.AuthMiddleware(handlers.CreateEmployeeCardHandler))
 	mux.HandleFunc("POST /api/employeescard/{id}/document/create", middleware.AuthMiddleware(handlers.CreateEmployeeCardDocumentHandler))
